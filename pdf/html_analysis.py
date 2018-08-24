@@ -14,12 +14,17 @@ from bs4 import BeautifulSoup
 import os
 from tool.logger import logger
 from tool.punct import sentence_delimiters
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 
 class htmlTableAnalysis(object):
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, saving_path, file_name):
+        self.file_name = file_name
         self.file_path = file_path
+        self.saving_path = saving_path
         self.soup = BeautifulSoup(self._read_file(), 'html5lib')
 
 
@@ -29,8 +34,9 @@ class htmlTableAnalysis(object):
         :return:
         """
         try:
-            with open(self.file_path) as f:
-                return f.read()
+            with open(os.path.join(self.file_path, self.file_name),'r') as f:
+                string = f.read()
+            return string
         except Exception,e:
             logger.error('reading html file failed for %s'%str(e))
 
@@ -85,12 +91,12 @@ class htmlTableAnalysis(object):
                 if element.name:
                     # element.name
                     if element.name == 'table':
-                        des = '连续表'
+                        des = u'连续表'
                         break
                     if element.get('align', '') == 'center':
                         is_center = True
                         try:
-                            int(self.get_tag_string(element).strip())
+                            int(self._get_tag_string(element).strip())
                             is_center = False
                             continue
                         except:
@@ -98,14 +104,14 @@ class htmlTableAnalysis(object):
                             #     continue
                             # else:
                             #     break
-                            des = self.get_tag_string(element) + des
+                            des = self._get_tag_string(element) + des
                             continue
                     else:
                         if is_center:
                             break
 
-                    des = self.get_tag_string(element) + des
-                    if self.check_sentence(des):
+                    des = self._get_tag_string(element) + des
+                    if self._check_sentence(des):
                         break
                 else:
                     continue
@@ -163,6 +169,76 @@ class htmlTableAnalysis(object):
         invaild = True if float(empty_head) / table_col > 0.8 or table_col < 1 or table_row < 2 else False
         return table_col, table_row, row_head, invaild
 
+    def save_info_list(self, info_list):
+        """
+
+        :param info:
+        :return:
+        """
+        try:
+            string = json.dumps(info_list, ensure_ascii=False, indent=1)
+            file_name_origin = self.file_name.split('.')[0]
+            with open(os.path.join(self.saving_path, file_name_origin + '.json'),'w') as f:
+                f.write(string)
+        except Exception,e:
+            logger.error('dump info list failed for %s'%str(e))
+
+
+    def generate_table_matrix(self, table_tag, table_col, table_row):
+        """
+
+        :param table_tag:
+        :param table_col:
+        :param table_row:
+        :return:
+        """
+
+        str_matrix = [[None for _ in range(table_col)] for _ in range(table_row)]
+        for row_index, tr in enumerate(table_tag.find_all('tr')):
+            for col_index, td in enumerate(tr.find_all('td')):
+                wide = 0
+                height = 0
+                des = self._get_tag_string(td)
+                des = des.strip()
+                for i in range(0, table_col - col_index):
+                    if str_matrix[row_index][col_index + i] == None:
+                        str_matrix[row_index][col_index + i] = des
+                        # 横向重定位
+                        col_index = col_index + i
+                        break
+                    else:
+                        continue
+                if td.attrs.get('rowspan'):
+                    height = int(td.attrs.get('rowspan'))
+                if td.attrs.get('colspan'):
+                    wide = int(td.attrs.get('colspan'))
+                if wide and height:
+                    for i in range(0, height):
+                        for j in range(0, wide):
+                            str_matrix[row_index + i][col_index + j] = des
+                    continue
+                elif wide or height:
+                    if wide:
+                        for i in range(1, wide):
+                            str_matrix[row_index][col_index + i] = des
+                    if height:
+                        for i in range(1, height):
+                            str_matrix[row_index + i][col_index] = des
+                else:
+                    pass
+
+        return str_matrix
+
+    def generate_table_json(self, table_tag, matrix, row_head):
+        """
+        表格数据json化
+        :param table_tag:
+        :param matrix:
+        :param row_head:
+        :return:
+        """
+        pass
+
     def generate_table_info(self):
         """
 
@@ -170,11 +246,36 @@ class htmlTableAnalysis(object):
         """
         self.table_info = list()
         try:
-            for table in self.soup.find_all('table'):
+            for index, table in enumerate(self.soup.find_all('table')):
                 info = dict()
                 info['describe'] = self._search_table_describe(table)
                 table_col, table_row, row_head, invaild = self._search_table_base_info(table)
-
-
+                if invaild:
+                    logger.info('find a invaild table tag, continue...')
+                    continue
+                else:
+                    info['matrix'] = self.generate_table_matrix(table, table_col, table_row)
+                    info['tableIndex'] = index
+                    # info['json'] = self.generate_table_json
+                try:
+                    json.dumps(info, ensure_ascii=False, indent=4)
+                except:
+                    logger.info('index %d table encoding failed'%index)
+                self.table_info.append(info)
         except Exception,e:
             logger.error('get table info failed for %s'%str(e))
+
+        return self.table_info
+
+if __name__ == '__main__':
+    file_path = '/home/showlove/cc/gov/ppp/html'
+    file_name = '高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm'
+    # file_name = '河北省承德市宽城满族自治县中医院迁址新建一期财政承受能力报告.htm'
+    # file_name = '陕西省铜川市汽车客运综合总站PPP项目财政可承受能力论证报告.htm'
+    # file_name = '陕西省铜川市耀州区“美丽乡村”气化工程财政承受能力论证报告.htm'
+    # file_name = '宜昌市妇幼保健院（市儿童医院）PPP项目财政承受能力报告.htm'
+    saving_path = '/home/showlove/cc/gov/ppp/table_info'
+    model = htmlTableAnalysis(file_path, saving_path, file_name)
+    table_info_list = model.generate_table_info()
+    model.save_info_list(table_info_list)
+

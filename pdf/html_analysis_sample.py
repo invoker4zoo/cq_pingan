@@ -162,67 +162,67 @@ def generate_table_matrix(table_tag, table_col, table_row):
 
 
 ####### test part
-file_path = '/home/showlove/cc/gov/ppp/html'
-test_file = os.path.join(file_path,'高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm')
-# test_file = os.path.join(file_path,'河北省承德市宽城满族自治县中医院迁址新建一期财政承受能力报告.htm')
-# test_file = os.path.join(file_path,'陕西省铜川市汽车客运综合总站PPP项目财政可承受能力论证报告.htm')
-# test_file = os.path.join(file_path,'陕西省铜川市耀州区“美丽乡村”气化工程财政承受能力论证报告.htm')
-
-
-with open(test_file) as f:
-    html = f.read()
-    soup = BeautifulSoup(html, 'html5lib')
-    table_list = soup.find_all('table')
-    for table in table_list:
-        print '表格描述:'
-        des = ''
-        for element in table.previous_siblings:
-            is_center = False
-            if element.name:
-                # element.name
-                if element.name == 'table':
-                    des = '连续表'
-                    break
-                if element.get('align','') == 'center':
-                    # des = get_tag_string(element) + des
-                    is_center = True
-                    try:
-                        int(get_tag_string(element).strip())
-                        is_center = False
-                        continue
-                    except:
-                        # if is_center:
-                        #     continue
-                        # else:
-                        #     break
-                        des = get_tag_string(element) + des
-                        continue
-                else:
-                    if is_center:
-                        break
-
-                des = get_tag_string(element) + des
-                if check_sentence(des):
-                    break
-            else:
-                continue
-        if check_sentence(des):
-            for index, seg in enumerate(des[::-1]):
-                if seg.encode('utf-8') in sentence_delimiters:
-                    if index == 0:
-                        continue
-                    else:
-                        print des.split(seg)[-1]
-                        break
-        else:
-            print des
-
-        # table des
-        table_col, table_row, row_head, invaild = describe_table(table)
-        if invaild:
-            print '表格无效'
-            continue
-        else:
-            str_matrix = generate_table_matrix(table,table_col,table_row)
-            print_matrix(str_matrix)
+# file_path = '/home/showlove/cc/gov/ppp/html'
+# test_file = os.path.join(file_path,'高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm')
+# # test_file = os.path.join(file_path,'河北省承德市宽城满族自治县中医院迁址新建一期财政承受能力报告.htm')
+# # test_file = os.path.join(file_path,'陕西省铜川市汽车客运综合总站PPP项目财政可承受能力论证报告.htm')
+# # test_file = os.path.join(file_path,'陕西省铜川市耀州区“美丽乡村”气化工程财政承受能力论证报告.htm')
+#
+#
+# with open(test_file) as f:
+#     html = f.read()
+#     soup = BeautifulSoup(html, 'html5lib')
+#     table_list = soup.find_all('table')
+#     for table in table_list:
+#         print '表格描述:'
+#         des = ''
+#         for element in table.previous_siblings:
+#             is_center = False
+#             if element.name:
+#                 # element.name
+#                 if element.name == 'table':
+#                     des = '连续表'
+#                     break
+#                 if element.get('align','') == 'center':
+#                     # des = get_tag_string(element) + des
+#                     is_center = True
+#                     try:
+#                         int(get_tag_string(element).strip())
+#                         is_center = False
+#                         continue
+#                     except:
+#                         # if is_center:
+#                         #     continue
+#                         # else:
+#                         #     break
+#                         des = get_tag_string(element) + des
+#                         continue
+#                 else:
+#                     if is_center:
+#                         break
+#
+#                 des = get_tag_string(element) + des
+#                 if check_sentence(des):
+#                     break
+#             else:
+#                 continue
+#         if check_sentence(des):
+#             for index, seg in enumerate(des[::-1]):
+#                 if seg.encode('utf-8') in sentence_delimiters:
+#                     if index == 0:
+#                         continue
+#                     else:
+#                         print des.split(seg)[-1]
+#                         break
+#         else:
+#             print des
+#
+#         # table des
+#         table_col, table_row, row_head, invaild = describe_table(table)
+#         if invaild:
+#             print '表格无效'
+#             continue
+#         else:
+#             str_matrix = generate_table_matrix(table,table_col,table_row)
+#             print_matrix(str_matrix)
 
