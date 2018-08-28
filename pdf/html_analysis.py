@@ -10,10 +10,12 @@
 """
 
 import json
+import math
 from bs4 import BeautifulSoup
 import os
 from tool.logger import logger
 from tool.punct import sentence_delimiters
+from tool.text_cut import TextCut
 import numpy as np
 import sys
 reload(sys)
@@ -27,6 +29,8 @@ class htmlTableAnalysis(object):
         self.file_path = file_path
         self.saving_path = saving_path
         self.soup = BeautifulSoup(self._read_file(), 'html5lib')
+        # 初始化相似度计算资源
+        self._init_nlp_source()
 
 
     def _read_file(self):
@@ -40,6 +44,80 @@ class htmlTableAnalysis(object):
             return string
         except Exception,e:
             logger.error('reading html file failed for %s'%str(e))
+
+    def _init_nlp_source(self):
+        """
+
+
+        """
+        self._init_nlp_model()
+        self._init_key_sentence_list()
+
+    def _init_nlp_model(self):
+        """
+        初始化分词模型
+
+        """
+        logger.info('初始化分词模型...')
+        self.nlp_model = TextCut()
+
+    def _init_key_sentence_list(self):
+        """
+        初始化相似度计算的短语列表
+
+        """
+        self.key_sentence_list = [
+            u'股权投资支出责任',
+            u'运营补贴支出责任',
+            u'风险承担责任',
+            u'配套投入支出责任',
+            u'一般公共预算支出数额',
+            u'政府基金预算支出数额'
+        ]
+        self.key_sentence_seg_list = [self.nlp_model.cut_text(key_sentence) \
+                                      for key_sentence in self.key_sentence_list]
+
+    def cal_similarity_dic(self, table_info):
+        """
+
+        :param table_info:
+        :return:
+        """
+        self.similarity_dict = dict()
+        for key_sentence in self.key_sentence_list:
+            self.similarity_dict[key_sentence] = list()
+        for info_dict in table_info:
+            table_index = info_dict.get('tableIndex')
+            for key in info_dict.get('tableInfo', [{}])[0].keys():
+                for key_sentence,key_sentence_seg in zip(self.key_sentence_list, self.key_sentence_seg_list):
+                    similarity = self.two_sentences_similarity(self.nlp_model.cut_text(key), key_sentence_seg)
+                    if similarity > 0:
+                        similarity_dict = {
+                            'tableIndex': table_index,
+                            'key': key,
+                            'similarity': similarity
+                        }
+                        self.similarity_dict[key_sentence].append(similarity_dict)
+                    else:
+                        pass
+        for key_sentence in self.key_sentence_list:
+            self.similarity_dict[key_sentence] = sorted(self.similarity_dict[key_sentence], \
+                                                        key=lambda info:info['similarity'], reverse=True)
+        return self.similarity_dict
+
+
+    def two_sentences_similarity(self, seg_list_1, seg_list_2):
+        '''
+        计算两个分词列表的相似性
+        :param seg_list_1:
+        :param seg_list_2:
+        :return:
+        '''
+        counter = 0
+        for seg in seg_list_1:
+            if seg in seg_list_2:
+                counter += 1
+        return counter / (math.log(len(seg_list_1) + len(seg_list_2)))
 
     def _analysis_table_tag(self, table_tag):
         """
@@ -79,9 +157,11 @@ class htmlTableAnalysis(object):
 
     def _check_list_repeat(self, key_list):
         """
-
+        判断列表中是否存在重复的子列表,如果有，提出子列表的index 和key
         :param key_list:
-        :return:
+        :return:is_repeat bool
+                repeat index list [[index1, index2, index3,...],...]
+                new_key_list list
         """
         key_list = key_list.tolist()
         is_repeat = False
@@ -180,12 +260,12 @@ class htmlTableAnalysis(object):
                 else:
                     continue
             if self._check_sentence(des):
+                if des[-1].encode('utf-8') in sentence_delimiters:
+                    des = des[:-1]
                 for index, seg in enumerate(des[::-1]):
                     if seg.encode('utf-8') in sentence_delimiters:
-                        if index == 0:
-                            continue
-                        else:
-                            return des.split(seg)[-1]
+                        return des.split(seg)[-1]
+                return des
             else:
                 return des
         except Exception,e:
@@ -228,12 +308,14 @@ class htmlTableAnalysis(object):
                 table_col += int(td.attrs.get('colspan'))
             else:
                 table_col += 1
+            #
             if td.attrs.get('rowspan'):
                 type_list.append(1)
             elif td.attrs.get('colspan'):
                 type_list.append(2)
             else:
                 type_list.append(0)
+        # 计算左上表头大小，同一类型才能被默认为一个表头
         if type_list[0] == 0:
             col_head = 1
         else:
@@ -319,12 +401,15 @@ class htmlTableAnalysis(object):
         """
         table_info= []
         matrix = np.array(matrix)
-        table_col = len(matrix[0,:])
-        table_row = len(matrix[:,0])
-        row_list = matrix[row_head:,col_head - 1]
-        col_list = matrix[row_head - 1,col_head:]
+        table_col = len(matrix[0, :])
+        table_row = len(matrix[:, 0])
+        row_list = matrix[row_head:, col_head - 1]
+        col_list = matrix[row_head - 1, col_head:]
+        head_str = matrix[row_head - 1, col_head - 1]
         year_head = 0
         num_head = 0
+        year_head_row = 0
+        num_head_row = 0
         for seg in col_list:
             if seg.endswith(u'年'):
                 year_head += 1
@@ -333,7 +418,29 @@ class htmlTableAnalysis(object):
                 num_head += 1
             except:
                 pass
+        for seg in row_list:
+            if seg.endswith(u'年'):
+                year_head_row += 1
+            try:
+                float(seg.strip())
+                num_head_row += 1
+            except:
+                pass
+        # clean head_str
+        head_str = head_str.strip().replace('\n', '').replace(' ', '')
+        if head_str == u'序号':
+            head_str_index = True
+        else:
+            head_str_index = False
+
+
         is_horizontal = True if float(year_head) / table_col > 0.6 or float(num_head) / table_col > 0.6 else False
+        # 去除序号列
+        is_row_num = True if float(year_head_row) / table_col < 0.4 or float(num_head_row) / table_col > 0.6 else False
+        if head_str_index and is_row_num:
+            col_head += 1
+            row_list = matrix[row_head:, col_head - 1]
+            col_list = matrix[row_head - 1, col_head:]
         if is_horizontal:
             key_list = row_list
             inner_key_list = col_list
@@ -344,9 +451,11 @@ class htmlTableAnalysis(object):
         if not is_repeat:
             info_dic = dict()
             for i, key in enumerate(key_list):
+                key = key.strip().replace('\n', '').replace(' ', '')
                 if key not in info_dic.keys():
                     info_dic[key] = dict()
                 for j, inner_key in enumerate(inner_key_list):
+                    inner_key = inner_key.strip().replace('\n', '').replace(' ', '')
                     if inner_key not in info_dic[key].keys():
                         if is_horizontal:
                             info_dic[key][inner_key] = matrix[i + row_head,j + col_head]
@@ -369,10 +478,12 @@ class htmlTableAnalysis(object):
                         inner_key_list = matrix[row_head:, col_head + index_list[0] - 1]
                 info_dic = dict()
                 for i, key in zip(index_list, new_key_list):
+                    key = key.strip().replace('\n', '').replace(' ', '')
                     if key not in info_dic.keys():
                         info_dic[key] = dict()
 
                     for j, inner_key in enumerate(inner_key_list):
+                        inner_key = inner_key.strip().replace('\n', '').replace(' ', '')
                         if inner_key not in info_dic[key].keys():
                             if is_horizontal:
                                 info_dic[key][inner_key] = matrix[i + row_head][j + col_head]
@@ -380,12 +491,6 @@ class htmlTableAnalysis(object):
                                 info_dic[key][inner_key] = matrix[j + row_head][i + col_head]
                 table_info.append(info_dic)
         return table_info
-
-
-
-
-
-
 
     def generate_table_info(self):
         """
@@ -418,13 +523,18 @@ class htmlTableAnalysis(object):
 
 if __name__ == '__main__':
     file_path = '/home/showlove/cc/gov/ppp/html'
-    # file_name = '高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm'
-    file_name = '河北省承德市宽城满族自治县中医院迁址新建一期财政承受能力报告.htm'
+    file_name = '高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm'
+    # file_name = '河北省承德市宽城满族自治县中医院迁址新建一期财政承受能力报告.htm'
     # file_name = '陕西省铜川市汽车客运综合总站PPP项目财政可承受能力论证报告.htm'
     # file_name = '陕西省铜川市耀州区“美丽乡村”气化工程财政承受能力论证报告.htm'
     # file_name = '宜昌市妇幼保健院（市儿童医院）PPP项目财政承受能力报告.htm'
     saving_path = '/home/showlove/cc/gov/ppp/table_info'
     model = htmlTableAnalysis(file_path, saving_path, file_name)
     table_info_list = model.generate_table_info()
-    model.save_info_list(table_info_list)
+    similarity_dict = model.cal_similarity_dic(table_info_list)
+    table_json = {
+        'data': table_info_list,
+        'similarity':similarity_dict
+    }
+    model.save_info_list(table_json)
 
