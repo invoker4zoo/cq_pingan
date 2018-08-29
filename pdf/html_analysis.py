@@ -454,6 +454,8 @@ class htmlTableAnalysis(object):
                 key = key.strip().replace('\n', '').replace(' ', '')
                 if key not in info_dic.keys():
                     info_dic[key] = dict()
+                else:
+                    continue
                 for j, inner_key in enumerate(inner_key_list):
                     inner_key = inner_key.strip().replace('\n', '').replace(' ', '')
                     if inner_key not in info_dic[key].keys():
@@ -534,7 +536,7 @@ if __name__ == '__main__':
     similarity_dict = model.cal_similarity_dic(table_info_list)
     table_json = {
         'data': table_info_list,
-        'similarity':similarity_dict
+        'similarity': similarity_dict
     }
     model.save_info_list(table_json)
 
