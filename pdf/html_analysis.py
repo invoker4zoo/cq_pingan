@@ -345,6 +345,20 @@ class htmlTableAnalysis(object):
         except Exception,e:
             logger.error('dump info list failed for %s'%str(e))
 
+    def save_new_soup(self):
+        """
+
+        :return:
+        """
+        try:
+            file_name = self.file_name
+            origin_name = file_name.split('.')[0]
+            new_name = origin_name + '_trans'
+            new_file_name = new_name + '.' + file_name.split('.')[-1]
+            with open(os.path.join(self.saving_path, new_file_name), 'w') as f:
+                f.write(str(self.soup.contents[0]))
+        except Exception, e:
+            logger.error('save new soup failed for %s'%str(e))
 
     def generate_table_matrix(self, table_tag, table_col, table_row):
         """
@@ -512,16 +526,70 @@ class htmlTableAnalysis(object):
                     info['matrix'] = self.generate_table_matrix(table, table_col, table_row)
                     info['tableIndex'] = index
                     info['tableInfo'] = self.generate_table_json(info['matrix'], row_head, col_head)
-                # testing
-                # try:
-                #     json.dumps(info, ensure_ascii=False, indent=4)
-                # except:
-                #     logger.info('index %d table encoding failed'%index)
                 self.table_info.append(info)
         except Exception,e:
             logger.error('get table info failed for %s'%str(e))
 
         return self.table_info
+
+    def generate_result_dict(self, table_info, similarity_dict):
+        """
+        将填报结果的内容抽取出来
+        :param table_info:table information list
+        :param similarity_dict: key sentence similarity dict
+        :return:result dict
+        """
+        try:
+            result_dict = dict()
+            for key, similarity_info in similarity_dict.items():
+                if key not in result_dict.keys():
+                    result_dict[key] = dict()
+                if len(similarity_info) > 0:
+                    # 暂时只取第一个排序最高的info，不考虑相同的情况
+                    table_index = similarity_info[0].get('tableIndex')
+                    search_key = similarity_info[0].get('key')
+                else:
+                    continue
+                for seg_info in table_info:
+                    if seg_info['tableIndex'] != table_index:
+                        continue
+                    else:
+                        for inner_key in seg_info['tableInfo'][0].keys():
+                            if inner_key != search_key:
+                                continue
+                            else:
+                                result_dict[key] = sorted(seg_info['tableInfo'][0][inner_key].iteritems(), \
+                                                          key=lambda key:key[0], reverse=False)
+            return result_dict
+
+        except Exception, e:
+            logger.error('generate result dict failed for %s'%str(e))
+            return None
+
+    def update_html(self, similarity_dict):
+        """
+        通过找到的表格位置修改html，添加链接和表格的锚点
+        :param similarity_dict:
+        :return:
+        """
+        try:
+            append_tag = self.soup.body.find_all('div')[-1]
+            for index, (key_sentence, similarity_info) in enumerate(similarity_dict.items()):
+                br_tag = self.soup.new_tag('br')
+                table_index = similarity_info[0]['tableIndex']
+                table_tag = self.soup.find_all('table')[table_index]
+                if table_tag.attrs.get('id'):
+                    new_tag = self.soup.new_tag('a')
+                    new_tag.attrs = {'href': '#%s' % table_tag.attrs.get('id')}
+                else:
+                    table_tag.attrs['id'] = 'link_%d' % index
+                    new_tag = self.soup.new_tag('a')
+                    new_tag.attrs = {'href': '#link_%d' % index}
+                new_tag.string = key_sentence
+                append_tag.insert_after(new_tag)
+                append_tag.insert_after(br_tag)
+        except Exception, e:
+            logger.error('update html failed for %s'%str(e))
 
 if __name__ == '__main__':
     file_path = '/home/showlove/cc/gov/ppp/html'
@@ -534,9 +602,20 @@ if __name__ == '__main__':
     model = htmlTableAnalysis(file_path, saving_path, file_name)
     table_info_list = model.generate_table_info()
     similarity_dict = model.cal_similarity_dic(table_info_list)
+    result_dict = model.generate_result_dict(table_info_list, similarity_dict)
+    model.update_html(similarity_dict)
+    # print result_dict
+    ####################################################
+    for key, info in result_dict.items():
+        print key.encode('utf-8')
+        for seg in info:
+            print seg[0].encode('utf-8') + ':' + seg[1]
+    ####################################################
     table_json = {
+        'result': result_dict,
         'data': table_info_list,
         'similarity': similarity_dict
     }
+    model.save_new_soup()
     model.save_info_list(table_json)
 
