@@ -35,5 +35,7 @@ if __name__ == "__main__":
     MONGODB_DB = "gov_finace"
     MONGODB_COLLECTION = "center"
     db = dbConnector(MONGODB_SERVER,MONGODB_PORT,MONGODB_DB,MONGODB_COLLECTION)
-    for i in db.collection.find():
-        print type(i)
+    # for i in db.collection.find():
+    #     print type(i)
+    result = db.collection.find({'noticeTitle': '关于开展三大粮食作物完全成本保险和收入保险试点工作的通知'})
+    print result

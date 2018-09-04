@@ -13,6 +13,7 @@ from tool.crawler import BaseCrawler
 from bs4 import BeautifulSoup
 from tool.db_connector import dbConnector
 import datetime
+import re
 import time
 import os
 
@@ -35,6 +36,7 @@ class GovFinaceCrawler(BaseCrawler):
         super(GovFinaceCrawler, self).__init__()
         self.base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
         self.category = 'zhengcefabu'
+        self.location = 'center'
         self.page = 23
         self.head = {
         'Accept': 'text / html, application / xhtml + xml, application / xml;q = 0.9, image / webp, image / apng, * / *;q = 0.8',
@@ -50,6 +52,7 @@ class GovFinaceCrawler(BaseCrawler):
         'Upgrade - Insecure - Requests':1,
         # 'User - Agent':'Mozilla / 5.0(X11; Linux x86_64) AppleWebKit / 537.36(KHTML, like Gecko) Chrome / 60.0 .3112 .78 Safari / 537.36'
         }
+        self.mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
 
     def _get_tag_string(self, tag):
         """
@@ -85,11 +88,61 @@ class GovFinaceCrawler(BaseCrawler):
         :param notice_info:
         :return:
         """
-        pass
+        try:
+            logger.info('insert notice info...')
+            self.mongo.collection.insert_one(notice_info)
+        except Exception, e:
+            logger.error('mongoDB insert notice info failed for %s'%str(e))
 
-    def search_title_page(self):
+    def _search_time_from_title(self, title):
         """
 
+        :param title:
+        :return:
+        """
+        try:
+            pattern = re.compile('（'.decode('utf-8') + u'(.*)' + '）'.decode('utf-8'))
+            for str in re.findall(pattern, title):
+                try:
+                    datetime.datetime.strptime(str, '%Y-%m-%d')
+                    return str
+                except:
+                    continue
+            logger.warn('do not find time str..')
+            return ''
+        except Exception, e:
+            logger.error('searching time string failed for %s'%str(e))
+            return ''
+
+    def _check_info_exist(self, title):
+        """
+        判断 title 的信息是否已经在数据库中
+        :param title:
+        :return:
+        """
+        try:
+            result = self.mongo.collection.find({'noticeTitle': title})
+            try:
+                result[0]
+                return True
+            except:
+                return False
+        except Exception, e:
+            logger.error('check title failed for %s'%str(e))
+
+    def run(self):
+        """
+        """
+        logger.info('begin crawler..')
+        try:
+            self._run()
+        except Exception, e:
+            logger.error('star crawler failed for %s, stop crawler'%str(e))
+            sys.exit(1)
+
+    def _run(self):
+        """
+        启动爬虫主函数
         :return:
         """
         self.notice_link_list = list()
@@ -105,6 +158,8 @@ class GovFinaceCrawler(BaseCrawler):
             notice_tag_list = page_soup.find_all('td', attrs={'class': 'ZITI'})
             for notice_tag in notice_tag_list:
                 title = notice_tag.attrs.get('title')
+                time_str = self._search_time_from_title(title)
+                logger.info('notice publish time is %s'%time_str)
                 if title:
                     pass
                 else:
@@ -115,7 +170,15 @@ class GovFinaceCrawler(BaseCrawler):
                 if link:
                     logger.info('searching notice info for %s' % title)
                     self.notice_link_list.append(link)
-                    link_info = self.search_link_info(link)
+                    link_info, is_exist = self.search_link_info(link)
+                    if link_info and not is_exist:
+                        link_info['publishTime'] = time_str
+                        self.save_notice_info(link_info)
+                    elif is_exist:
+                        logger.info('link info is existed')
+                        continue
+                    else:
+                        logger.warn('searching link info failed')
                 else:
                     logger.warning('get notice link failed for %s' % title)
                 # 间隔5秒
@@ -131,60 +194,79 @@ class GovFinaceCrawler(BaseCrawler):
         :param notice_link:
         :return:
         """
-        # generate for attachment file url
-        notice_baseurl = notice_link[0: (len(notice_link.split('/')[-1]) + 1) * -1]
-
-        response = self.get(notice_link)
-        notice_soup = BeautifulSoup(response, 'html5lib')
-        title_tag = notice_soup.find('td',attrs={'class': 'font_biao1'})
-        main_tag = notice_soup.find('div', attrs={'class': 'TRS_Editor'})
-        attachment_tag = notice_soup.find('span', attrs={'id': 'appendix'})
-        title = self._get_tag_string(title_tag).strip()
-
-        # notice doc search
-        doc_tag_list = main_tag.find_all('p')
-        doc_content = ''
-        doc_identify = ''
-        doc_attachment = ''
-        for doc_tag in doc_tag_list:
-            if doc_tag.attrs.get('align') == 'center':
-                doc_content += self._get_tag_string(doc_tag)
-                doc_identify += self._get_tag_string(doc_tag).strip()
-            # elif doc_tag.attrs.get('align') == 'justify':
-            #     doc_content += self._get_tag_string(doc_tag)
-            elif doc_tag.attrs.get('align') == 'right':
-                doc_content += self._get_tag_string(doc_tag)
-                doc_attachment += self._get_tag_string(doc_tag).strip()
+        try:
+            if notice_link.startswith('http'):
+                pass
             else:
-                doc_content += self._get_tag_string(doc_tag)
+                notice_link = self.title_base_url + notice_link[1:]
+            # generate for attachment file url
+            notice_baseurl = notice_link[0: (len(notice_link.split('/')[-1]) + 1) * -1]
 
-        # attachment file search
-        attachment_file_list = attachment_tag.find_all('a')
-        attachment_file_name_list = list()
-        attachment_file_link_list = list()
-        for attachment_file_tag in attachment_file_list:
-            attachment_file_name = ''
-            _attachment_link = attachment_file_tag.attrs.get('href')
-            _attachment_file_name = self._get_tag_string(attachment_file_tag).strip()
-            if ':' in _attachment_file_name:
-                attachment_file_name = _attachment_file_name.split(':')[-1]
-            else:
-                attachment_file_name = _attachment_file_name
-            attachment_file_link = notice_baseurl + _attachment_link[1:]
-            # saving file
-            self.save_attachement_file(attachment_file_link, attachment_file_name)
-            attachment_file_name_list.append(attachment_file_name)
-            attachment_file_link_list.append(attachment_file_link)
-        return {
-            'noticeTitle': title,
-            'noticeContent': doc_content,
-            'noticeIdentify': doc_identify,
-            'noticeAttachment': doc_attachment,
-            'attachmentFileList': attachment_file_name_list,
-            'attachmentLinkList': attachment_file_link_list
-        }
+            response = self.get(notice_link)
+            notice_soup = BeautifulSoup(response, 'html5lib')
+            title_tag = notice_soup.find('td', attrs={'class': 'font_biao1'})
+            main_tag = notice_soup.find('div', attrs={'class': 'TRS_Editor'})
+            attachment_tag = notice_soup.find('span', attrs={'id': 'appendix'})
+            title = self._get_tag_string(title_tag).strip()
+            if self._check_info_exist(title):
+                return None, True
+            logger.info('notice title is %s'% title)
+            # notice doc search
+            doc_tag_list = main_tag.find_all('p')
+            doc_content = ''
+            doc_identify = ''
+            doc_attachment = ''
+            # 原始网站中的公告内容使用p tag进行换行，所以在存入content的时候需要加入换行符
+            # 2018-9-4 cc
+            for doc_tag in doc_tag_list:
+                if doc_tag.attrs.get('align') == 'center':
+                    doc_content += self._get_tag_string(doc_tag) + '\n'
+                    doc_identify += self._get_tag_string(doc_tag).strip()
+                # elif doc_tag.attrs.get('align') == 'justify':
+                #     doc_content += self._get_tag_string(doc_tag)
+                elif doc_tag.attrs.get('align') == 'right':
+                    doc_content += self._get_tag_string(doc_tag) + '\n'
+                    doc_attachment += self._get_tag_string(doc_tag).strip() + '\n'
+                else:
+                    doc_content += self._get_tag_string(doc_tag) + '\n'
+
+            # attachment file search
+            attachment_file_list = attachment_tag.find_all('a')
+            attachment_file_name_list = list()
+            attachment_file_link_list = list()
+            for attachment_file_tag in attachment_file_list:
+                attachment_file_name = ''
+                _attachment_link = attachment_file_tag.attrs.get('href')
+                _attachment_file_name = self._get_tag_string(attachment_file_tag).strip()
+                if ':' in _attachment_file_name:
+                    attachment_file_name = _attachment_file_name.split(':')[-1]
+                elif '：' in _attachment_file_name:
+                    attachment_file_name = _attachment_file_name.split('：')[-1]
+                else:
+                    attachment_file_name = _attachment_file_name
+                # _attachment_link format './P020180828399303596996.pdf'
+                attachment_file_link = notice_baseurl + _attachment_link[1:]
+                # saving file
+                self.save_attachement_file(attachment_file_link, attachment_file_name)
+                attachment_file_name_list.append(attachment_file_name)
+                attachment_file_link_list.append(attachment_file_link)
+            return {
+                'noticeTitle': title,
+                'noticeContent': doc_content,
+                'noticeIdentify': doc_identify,
+                'noticeAttachment': doc_attachment,
+                'noticeLink': notice_link,
+                'attachmentFileList': attachment_file_name_list,
+                'attachmentLinkList': attachment_file_link_list,
+                'category': self.category,
+                'filePath': SAVING_PATH,
+                'location': self.location
+            }, False
+        except Exception, e:
+            logger.error('searching link info failed for %s'% str(e))
+            return None, False
 
 
 if __name__ == '__main__':
     crawler = GovFinaceCrawler()
-    crawler.search_title_page()
+    crawler.run()

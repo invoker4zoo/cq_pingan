@@ -24,14 +24,23 @@ sys.setdefaultencoding('utf-8')
 
 class htmlTableAnalysis(object):
 
-    def __init__(self, file_path, saving_path, file_name):
-        self.file_name = file_name
+    def __init__(self, file_path, saving_path):
+        # self.file_name = file_name
         self.file_path = file_path
         self.saving_path = saving_path
-        self.soup = BeautifulSoup(self._read_file(), 'html5lib')
+        # self.soup = BeautifulSoup(self._read_file(), 'html5lib')
         # 初始化相似度计算资源
         self._init_nlp_source()
 
+    def get_file_name(self, file_name):
+        """
+        读入文件名
+        函数独立，为循环读入文件夹下所有文件
+        :param file_name:
+        :return:
+        """
+        self.file_name = file_name
+        self.soup = BeautifulSoup(self._read_file(), 'html5lib')
 
     def _read_file(self):
         """
@@ -214,8 +223,7 @@ class htmlTableAnalysis(object):
                         cache_list.append(range(index, index + shift_length + 1))
                     return is_repeat, cache_list, new_key_list
                 else:
-                    for index in seg_index[1:]:
-                        new_key_list[index] = None
+                    return False, None, new_key_list
             else:
                 continue
         return False, None, new_key_list
@@ -368,44 +376,49 @@ class htmlTableAnalysis(object):
         :param table_row:
         :return:
         """
-
-        str_matrix = [[None for _ in range(table_col)] for _ in range(table_row)]
-        for row_index, tr in enumerate(table_tag.find_all('tr')):
-            for col_index, td in enumerate(tr.find_all('td')):
-                wide = 0
-                height = 0
-                des = self._get_tag_string(td)
-                des = des.strip()
-                for i in range(0, table_col - col_index):
-                    if str_matrix[row_index][col_index + i] == None:
-                        str_matrix[row_index][col_index + i] = des
-                        # 横向重定位
-                        col_index = col_index + i
-                        break
-                    else:
-                        continue
-                if td.attrs.get('rowspan'):
-                    height = int(td.attrs.get('rowspan'))
-                if td.attrs.get('colspan'):
-                    wide = int(td.attrs.get('colspan'))
-                if wide and height:
-                    for i in range(0, height):
-                        for j in range(0, wide):
-                            str_matrix[row_index + i][col_index + j] = des
-                    continue
-                elif wide or height:
-                    if wide:
-                        for i in range(1, wide):
+        try:
+            str_matrix = [[None for _ in range(table_col)] for _ in range(table_row)]
+            for row_index, tr in enumerate(table_tag.find_all('tr')):
+                for col_index, td in enumerate(tr.find_all('td')):
+                    wide = 0
+                    height = 0
+                    des = self._get_tag_string(td)
+                    des = des.strip()
+                    des = des.replace('\n', '')
+                    des = des.replace(' ', '')
+                    for i in range(0, table_col - col_index):
+                        if str_matrix[row_index][col_index + i] == None:
                             str_matrix[row_index][col_index + i] = des
-                    if height:
-                        for i in range(1, height):
-                            str_matrix[row_index + i][col_index] = des
-                else:
-                    pass
-        # self.matrix = str_matrix
-        return str_matrix
+                            # 横向重定位
+                            col_index = col_index + i
+                            break
+                        else:
+                            continue
+                    if td.attrs.get('rowspan'):
+                        height = int(td.attrs.get('rowspan'))
+                    if td.attrs.get('colspan'):
+                        wide = int(td.attrs.get('colspan'))
+                    if wide and height:
+                        for i in range(0, height):
+                            for j in range(0, wide):
+                                str_matrix[row_index + i][col_index + j] = des
+                        continue
+                    elif wide or height:
+                        if wide:
+                            for i in range(1, wide):
+                                str_matrix[row_index][col_index + i] = des
+                        if height:
+                            for i in range(1, height):
+                                str_matrix[row_index + i][col_index] = des
+                    else:
+                        pass
+            # self.matrix = str_matrix
+            return str_matrix
+        except Exception, e:
+            logger.error('get table matrix failed')
+            return None
 
-    def generate_table_json(self, matrix, row_head, col_head):
+    def generate_table_json(self, matrix, row_head, _col_head):
         """
         表格数据json化
         :param table_tag:
@@ -413,100 +426,106 @@ class htmlTableAnalysis(object):
         :param row_head:
         :return:
         """
-        table_info= []
-        matrix = np.array(matrix)
-        table_col = len(matrix[0, :])
-        table_row = len(matrix[:, 0])
-        row_list = matrix[row_head:, col_head - 1]
-        col_list = matrix[row_head - 1, col_head:]
-        head_str = matrix[row_head - 1, col_head - 1]
-        year_head = 0
-        num_head = 0
-        year_head_row = 0
-        num_head_row = 0
-        for seg in col_list:
-            if seg.endswith(u'年'):
-                year_head += 1
-            try:
-                int(seg.strip())
-                num_head += 1
-            except:
-                pass
-        for seg in row_list:
-            if seg.endswith(u'年'):
-                year_head_row += 1
-            try:
-                float(seg.strip())
-                num_head_row += 1
-            except:
-                pass
-        # clean head_str
-        head_str = head_str.strip().replace('\n', '').replace(' ', '')
-        if head_str == u'序号':
-            head_str_index = True
-        else:
-            head_str_index = False
-
-
-        is_horizontal = True if float(year_head) / table_col > 0.6 or float(num_head) / table_col > 0.6 else False
-        # 去除序号列
-        is_row_num = True if float(year_head_row) / table_col < 0.4 or float(num_head_row) / table_col > 0.6 else False
-        if head_str_index and is_row_num:
-            col_head += 1
-            row_list = matrix[row_head:, col_head - 1]
-            col_list = matrix[row_head - 1, col_head:]
-        if is_horizontal:
-            key_list = row_list
-            inner_key_list = col_list
-        else:
-            key_list = col_list
-            inner_key_list = row_list
-        is_repeat, repeat_index, new_key_list = self._check_list_repeat(key_list)
-        if not is_repeat:
-            info_dic = dict()
-            for i, key in enumerate(key_list):
-                key = key.strip().replace('\n', '').replace(' ', '')
-                if key not in info_dic.keys():
-                    info_dic[key] = dict()
-                else:
-                    continue
-                for j, inner_key in enumerate(inner_key_list):
-                    inner_key = inner_key.strip().replace('\n', '').replace(' ', '')
-                    if inner_key not in info_dic[key].keys():
-                        if is_horizontal:
-                            info_dic[key][inner_key] = matrix[i + row_head,j + col_head]
-                        else:
-                            info_dic[key][inner_key] = matrix[j + row_head,i + col_head]
-            table_info.append(info_dic)
-            # return table_json
-        else:
-            # 是否一开始就出现重复key
-            # 如果重复key是以第一个key开始，则重新提取inner_key
-            if repeat_index[0][0]!=0:
-                begin_repeat = False
+        try:
+            table_info= []
+            matrix = np.array(matrix)
+            table_col = len(matrix[0, :])
+            table_row = len(matrix[:, 0])
+            # 在函数内部对_col_head进行了操作，需要用函数内的变量代替_col_head
+            # global _col_head
+            row_list = matrix[row_head:, _col_head - 1]
+            col_list = matrix[row_head - 1, _col_head:]
+            head_str = matrix[row_head - 1, _col_head - 1]
+            year_head = 0
+            num_head = 0
+            year_head_row = 0
+            num_head_row = 0
+            for seg in col_list:
+                if seg.endswith(u'年'):
+                    year_head += 1
+                try:
+                    int(seg.strip())
+                    num_head += 1
+                except:
+                    pass
+            for seg in row_list:
+                if seg.endswith(u'年'):
+                    year_head_row += 1
+                try:
+                    float(seg.strip())
+                    num_head_row += 1
+                except:
+                    pass
+            # clean head_str
+            head_str = head_str.strip().replace('\n', '').replace(' ', '')
+            if head_str == u'序号':
+                head_str_index = True
             else:
-                begin_repeat = True
-            for index_list in repeat_index:
-                if begin_repeat:
-                    if is_horizontal:
-                        inner_key_list = matrix[row_head + index_list[0] - 1, col_head:]
-                    else:
-                        inner_key_list = matrix[row_head:, col_head + index_list[0] - 1]
+                head_str_index = False
+
+
+            is_horizontal = True if float(year_head) / table_col > 0.6 or float(num_head) / table_col > 0.6 else False
+            # 去除序号列
+            is_row_num = True if float(year_head_row) / table_col < 0.4 or float(num_head_row) / table_col > 0.6 else False
+            if head_str_index and is_row_num:
+                _col_head += 1
+                row_list = matrix[row_head:, _col_head - 1]
+                col_list = matrix[row_head - 1, _col_head:]
+            if is_horizontal:
+                key_list = row_list
+                inner_key_list = col_list
+            else:
+                key_list = col_list
+                inner_key_list = row_list
+            is_repeat, repeat_index, new_key_list = self._check_list_repeat(key_list)
+            if not is_repeat:
                 info_dic = dict()
-                for i, key in zip(index_list, new_key_list):
+                for i, key in enumerate(key_list):
                     key = key.strip().replace('\n', '').replace(' ', '')
                     if key not in info_dic.keys():
                         info_dic[key] = dict()
-
+                    else:
+                        continue
                     for j, inner_key in enumerate(inner_key_list):
                         inner_key = inner_key.strip().replace('\n', '').replace(' ', '')
                         if inner_key not in info_dic[key].keys():
                             if is_horizontal:
-                                info_dic[key][inner_key] = matrix[i + row_head][j + col_head]
+                                info_dic[key][inner_key] = matrix[i + row_head,j + _col_head]
                             else:
-                                info_dic[key][inner_key] = matrix[j + row_head][i + col_head]
+                                info_dic[key][inner_key] = matrix[j + row_head, i + _col_head]
                 table_info.append(info_dic)
-        return table_info
+                # return table_json
+            else:
+                # 是否一开始就出现重复key
+                # 如果重复key是以第一个key开始，则重新提取inner_key
+                if repeat_index[0][0]!=0:
+                    begin_repeat = False
+                else:
+                    begin_repeat = True
+                for index_list in repeat_index:
+                    if begin_repeat:
+                        if is_horizontal:
+                            inner_key_list = matrix[row_head + index_list[0] - 1, _col_head:]
+                        else:
+                            inner_key_list = matrix[row_head:, _col_head + index_list[0] - 1]
+                    info_dic = dict()
+                    for i, key in zip(index_list, new_key_list):
+                        key = key.strip().replace('\n', '').replace(' ', '')
+                        if key not in info_dic.keys():
+                            info_dic[key] = dict()
+
+                        for j, inner_key in enumerate(inner_key_list):
+                            inner_key = inner_key.strip().replace('\n', '').replace(' ', '')
+                            if inner_key not in info_dic[key].keys():
+                                if is_horizontal:
+                                    info_dic[key][inner_key] = matrix[i + row_head][j + _col_head]
+                                else:
+                                    info_dic[key][inner_key] = matrix[j + row_head][i + _col_head]
+                    table_info.append(info_dic)
+            return table_info
+        except Exception, e:
+            logger.error('get table info failed for %s'%str(e))
+            return []
 
     def generate_table_info(self):
         """
@@ -592,30 +611,50 @@ class htmlTableAnalysis(object):
             logger.error('update html failed for %s'%str(e))
 
 if __name__ == '__main__':
-    file_path = '/home/showlove/cc/gov/ppp/html'
-    file_name = '高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm'
+    # file_path = '/home/showlove/cc/gov/ppp/html'
+    # file_name = '高青县东部城区和南部新区集中供热工程项目财政承受能力论证报告（含附表）.htm'
     # file_name = '河北省承德市宽城满族自治县中医院迁址新建一期财政承受能力报告.htm'
     # file_name = '陕西省铜川市汽车客运综合总站PPP项目财政可承受能力论证报告.htm'
     # file_name = '陕西省铜川市耀州区“美丽乡村”气化工程财政承受能力论证报告.htm'
     # file_name = '宜昌市妇幼保健院（市儿童医院）PPP项目财政承受能力报告.htm'
-    saving_path = '/home/showlove/cc/gov/ppp/table_info'
-    model = htmlTableAnalysis(file_path, saving_path, file_name)
-    table_info_list = model.generate_table_info()
-    similarity_dict = model.cal_similarity_dic(table_info_list)
-    result_dict = model.generate_result_dict(table_info_list, similarity_dict)
-    model.update_html(similarity_dict)
-    # print result_dict
-    ####################################################
-    for key, info in result_dict.items():
-        print key.encode('utf-8')
-        for seg in info:
-            print seg[0].encode('utf-8') + ':' + seg[1]
-    ####################################################
-    table_json = {
-        'result': result_dict,
-        'data': table_info_list,
-        'similarity': similarity_dict
-    }
-    model.save_new_soup()
-    model.save_info_list(table_json)
+    # saving_path = '/home/showlove/cc/gov/ppp/table_info'
+    # model = htmlTableAnalysis(file_path, saving_path, file_name)
+    # table_info_list = model.generate_table_info()
+    # similarity_dict = model.cal_similarity_dic(table_info_list)
+    # result_dict = model.generate_result_dict(table_info_list, similarity_dict)
+    # model.update_html(similarity_dict)
+    # # print result_dict
+    # ####################################################
+    # for key, info in result_dict.items():
+    #     print key.encode('utf-8')
+    #     for seg in info:
+    #         print seg[0].encode('utf-8') + ':' + seg[1]
+    # ####################################################
+    # table_json = {
+    #     'result': result_dict,
+    #     'data': table_info_list,
+    #     'similarity': similarity_dict
+    # }
+    # model.save_new_soup()
+    # model.save_info_list(table_json)
+    file_path = '/home/showlove/cc/gov/ppp/test/html'
+    saving_path = '/home/showlove/cc/gov/ppp/test/table_info'
+    model = htmlTableAnalysis(file_path, saving_path)
+    files = os.listdir(file_path)
+    for file_name in files:
+        if file_name.endswith('htm'):
+            logger.info('begin file %s'%file_name)
+            model.get_file_name(file_name)
+            table_info_list = model.generate_table_info()
+            similarity_dict = model.cal_similarity_dic(table_info_list)
+            result_dict = model.generate_result_dict(table_info_list, similarity_dict)
+            table_json = {
+                'result': result_dict,
+                'data': table_info_list,
+                'similarity': similarity_dict
+            }
+            model.save_info_list(table_json)
+        else:
+            continue
+
 
