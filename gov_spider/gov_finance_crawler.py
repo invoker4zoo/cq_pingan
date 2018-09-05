@@ -32,12 +32,12 @@ MONGODB_COLLECTION = "center"
 
 class GovFinaceCrawler(BaseCrawler):
 
-    def __init__(self):
+    def __init__(self, base_url, category, location, page):
         super(GovFinaceCrawler, self).__init__()
-        self.base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
-        self.category = 'zhengcefabu'
-        self.location = 'center'
-        self.page = 23
+        self.base_url = base_url
+        self.category = category
+        self.location = location
+        self.page = page
         self.head = {
         'Accept': 'text / html, application / xhtml + xml, application / xml;q = 0.9, image / webp, image / apng, * / *;q = 0.8',
         'Accept - Encoding':'gzip, deflate',
@@ -155,7 +155,12 @@ class GovFinaceCrawler(BaseCrawler):
             logger.info('searching gov finance notice link on page %d'%(page + 1))
             response = self.get(url)
             page_soup = BeautifulSoup(response, 'html5lib')
-            notice_tag_list = page_soup.find_all('td', attrs={'class': 'ZITI'})
+            # debug 2018-9-5
+            # 财经视点栏目的tag class名字与其他栏目的tag class不一致
+            if self.category == 'caijingshidian':
+                notice_tag_list = page_soup.find_all('td', attrs={'class': 'xiaxu'})
+            else:
+                notice_tag_list = page_soup.find_all('td', attrs={'class': 'ZITI'})
             for notice_tag in notice_tag_list:
                 title = notice_tag.attrs.get('title')
                 time_str = self._search_time_from_title(title)
@@ -234,6 +239,8 @@ class GovFinaceCrawler(BaseCrawler):
             attachment_file_list = attachment_tag.find_all('a')
             attachment_file_name_list = list()
             attachment_file_link_list = list()
+            # 部分文件的后缀名不在附件名中出现需要从链接中取出后缀名
+            # 2018-9-5 未修改
             for attachment_file_tag in attachment_file_list:
                 attachment_file_name = ''
                 _attachment_link = attachment_file_tag.attrs.get('href')
@@ -268,5 +275,31 @@ class GovFinaceCrawler(BaseCrawler):
 
 
 if __name__ == '__main__':
-    crawler = GovFinaceCrawler()
+    # # 中央财政部政策发布频道
+    # base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
+    # category = 'zhengcefabu'
+    # location = 'center'
+    # page = 23
+    # crawler = GovFinaceCrawler(base_url, category, location, page)
+    # crawler.run()
+    # # 中央财政部政策解读频道
+    # base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
+    # category = 'zhengcejiedu'
+    # location = 'center'
+    # page = 17
+    # crawler = GovFinaceCrawler(base_url, category, location, page)
+    # crawler.run()
+    # # 中央财政部财政数据频道
+    # base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
+    # category = 'caizhengshuju'
+    # location = 'center'
+    # page = 22
+    # crawler = GovFinaceCrawler(base_url, category, location, page)
+    # crawler.run()
+    # 中央财政部财经视点频道
+    base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
+    category = 'caijingshidian'
+    location = 'center'
+    page = 15
+    crawler = GovFinaceCrawler(base_url, category, location, page)
     crawler.run()
