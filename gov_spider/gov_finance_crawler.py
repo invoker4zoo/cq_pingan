@@ -89,10 +89,17 @@ class GovFinaceCrawler(BaseCrawler):
         :return:
         """
         try:
-            logger.info('insert notice info...')
-            self.mongo.collection.insert_one(notice_info)
+            if not self._check_info_exist(notice_info['noticeTitle']):
+                logger.info('insert notice info...')
+                self.mongo.collection.insert_one(notice_info)
+            else:
+                logger.info('update notice info...')
+                self.mongo.collection.find_one_and_update({'noticeTitle': notice_info['noticeTitle']},
+                                                          {'$set': notice_info}
+                                                          )
+
         except Exception, e:
-            logger.error('mongoDB insert notice info failed for %s'%str(e))
+            logger.error('mongoDB store notice info failed for %s'%str(e))
 
     def _search_time_from_title(self, title):
         """
@@ -213,8 +220,8 @@ class GovFinaceCrawler(BaseCrawler):
             main_tag = notice_soup.find('div', attrs={'class': 'TRS_Editor'})
             attachment_tag = notice_soup.find('span', attrs={'id': 'appendix'})
             title = self._get_tag_string(title_tag).strip()
-            if self._check_info_exist(title):
-                return None, True
+            # if self._check_info_exist(title):
+            #     return None, True
             logger.info('notice title is %s'% title)
             # notice doc search
             doc_tag_list = main_tag.find_all('p')
@@ -240,10 +247,15 @@ class GovFinaceCrawler(BaseCrawler):
             attachment_file_name_list = list()
             attachment_file_link_list = list()
             # 部分文件的后缀名不在附件名中出现需要从链接中取出后缀名
-            # 2018-9-5 未修改
+            # 2018-9-6 debug
             for attachment_file_tag in attachment_file_list:
                 attachment_file_name = ''
                 _attachment_link = attachment_file_tag.attrs.get('href')
+                try:
+                    file_type = _attachment_link.split('.')[-1]
+                except:
+                    logger.warn('search file type failed')
+                    file_type = ''
                 _attachment_file_name = self._get_tag_string(attachment_file_tag).strip()
                 if ':' in _attachment_file_name:
                     attachment_file_name = _attachment_file_name.split(':')[-1]
@@ -251,6 +263,15 @@ class GovFinaceCrawler(BaseCrawler):
                     attachment_file_name = _attachment_file_name.split('：')[-1]
                 else:
                     attachment_file_name = _attachment_file_name
+                # add file attachment type
+                try:
+                    attachment_file_type = attachment_file_name.split('.')[-1]
+                except:
+                    attachment_file_type = ''
+                if attachment_file_type not in ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip']\
+                        and file_type != '':
+                    attachment_file_name = attachment_file_name + '.' + file_type
+
                 # _attachment_link format './P020180828399303596996.pdf'
                 attachment_file_link = notice_baseurl + _attachment_link[1:]
                 # saving file
@@ -275,13 +296,13 @@ class GovFinaceCrawler(BaseCrawler):
 
 
 if __name__ == '__main__':
-    # # 中央财政部政策发布频道
-    # base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
-    # category = 'zhengcefabu'
-    # location = 'center'
-    # page = 23
-    # crawler = GovFinaceCrawler(base_url, category, location, page)
-    # crawler.run()
+    # 中央财政部政策发布频道
+    base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
+    category = 'zhengcefabu'
+    location = 'center'
+    page = 23
+    crawler = GovFinaceCrawler(base_url, category, location, page)
+    crawler.run()
     # # 中央财政部政策解读频道
     # base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
     # category = 'zhengcejiedu'
@@ -296,10 +317,10 @@ if __name__ == '__main__':
     # page = 22
     # crawler = GovFinaceCrawler(base_url, category, location, page)
     # crawler.run()
-    # 中央财政部财经视点频道
-    base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
-    category = 'caijingshidian'
-    location = 'center'
-    page = 15
-    crawler = GovFinaceCrawler(base_url, category, location, page)
-    crawler.run()
+    # # 中央财政部财经视点频道
+    # base_url = 'http://www.mof.gov.cn/zhengwuxinxi'
+    # category = 'caijingshidian'
+    # location = 'center'
+    # page = 15
+    # crawler = GovFinaceCrawler(base_url, category, location, page)
+    # crawler.run()
