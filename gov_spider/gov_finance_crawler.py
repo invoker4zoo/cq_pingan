@@ -187,6 +187,8 @@ class GovFinaceCrawler(BaseCrawler):
                         link_info['publishTime'] = time_str
                         self.save_notice_info(link_info)
                     elif is_exist:
+                        link_info['publishTime'] = time_str
+                        self.save_notice_info(link_info)
                         logger.info('link info is existed')
                         continue
                     else:
@@ -220,6 +222,9 @@ class GovFinaceCrawler(BaseCrawler):
             main_tag = notice_soup.find('div', attrs={'class': 'TRS_Editor'})
             attachment_tag = notice_soup.find('span', attrs={'id': 'appendix'})
             title = self._get_tag_string(title_tag).strip()
+            # debug 2018-9-12
+            # file name without space
+            title = title.replace(' ', '')
             # if self._check_info_exist(title):
             #     return None, True
             logger.info('notice title is %s'% title)
