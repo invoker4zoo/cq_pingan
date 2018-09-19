@@ -37,25 +37,35 @@ type    notice/file
     'publish_org': '',      # 发布机构
     'publish_org_2': '',    # 发布的二级机构
     'title': '',            # 标题
-    'category': '',         # 类别，notice [政策发布, 财经视点, 政策解读, 财政数据] file [文本附件，数据附件， 表格附件]
+    'category': '',         # 文档栏目划分，notice [政策发布, 财经视点, 政策解读, 财政数据] file [文本附件，数据附件， 表格附件]
+    'classify': '',         # 文档类型划分[财政收入，民生支出，税收增长，债务管理，社会保障支出，涉农资金，...]
     'content': '',          # 文本内容
-    'content_identify': '', # content的标识，例：财会〔2018〕24号
+    'identify': '',         # 抽取到的文档标示
+    'content_identify': '', # content中提到的标识，例：财会〔2018〕24号
     'content_attach': '',   # content的后缀
     'quote_title': [],      # 标题引用文件
     'quote_content':[],     # 正文引用文件
     'entity_loc': [],       # 命名实体，地点
-    'entity_org': [],       # 明明是提，机构
+    'entity_org': [],       # 命名实体，机构
     'entity_name': [],      # 命名实体，姓名
     'attachment_file': [],  # 附件列表
+    'key_word': [],         # 关键词
+    'abstract': [],         # 摘要
+    'data_key': [],         # 抽取的数据项目
+    'data': {}/[],          # 抽取的数据对象
 }
 """
 
-mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
-for record in mongo.collection.find():
-    content = record.get('noticeContent', '')
-    title = record.get('noticeTitle', '')
-    category = record.get('category', '')
-    if category:
-        category_trans = CATEGORY.get(category)
-    else:
-        pass
+# mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
+# for record in mongo.collection.find():
+#     content = record.get('noticeContent', '')
+#     title = record.get('noticeTitle', '')
+#     category = record.get('category', '')
+#     if category:
+#         category_trans = CATEGORY.get(category)
+#     else:
+#         pass
+
+
+if __name__ == '__main__':
+    pass

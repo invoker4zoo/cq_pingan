@@ -30,7 +30,7 @@ class htmlTableAnalysis(object):
         self.saving_path = saving_path
         # self.soup = BeautifulSoup(self._read_file(), 'html5lib')
         # 初始化相似度计算资源
-        self._init_nlp_source()
+        # self._init_nlp_source()
 
     def get_file_name(self, file_name):
         """
@@ -50,7 +50,7 @@ class htmlTableAnalysis(object):
         try:
             with open(os.path.join(self.file_path, self.file_name),'r') as f:
                 string = f.read()
-            return string
+            return string.decode('utf-8')
         except Exception,e:
             logger.error('reading html file failed for %s'%str(e))
 
@@ -617,6 +617,12 @@ if __name__ == '__main__':
     # file_name = '陕西省铜川市汽车客运综合总站PPP项目财政可承受能力论证报告.htm'
     # file_name = '陕西省铜川市耀州区“美丽乡村”气化工程财政承受能力论证报告.htm'
     # file_name = '宜昌市妇幼保健院（市儿童医院）PPP项目财政承受能力报告.htm'
+    # file_name = 'test.htm'
+    # file_path = '/home/showlove/cc/gov/ppp/test/html'
+    # saving_path = '/home/showlove/cc/gov/ppp/test/table_info'
+    # model = htmlTableAnalysis(file_path, saving_path)
+    # model.get_file_name(file_name)
+    # table_info_list = model.generate_table_info()
     # saving_path = '/home/showlove/cc/gov/ppp/table_info'
     # model = htmlTableAnalysis(file_path, saving_path, file_name)
     # table_info_list = model.generate_table_info()
