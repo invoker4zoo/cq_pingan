@@ -11,6 +11,10 @@
 from neo4j.v1 import GraphDatabase
 from logger import logger
 
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
 
 class Neo4jHandler:
     """
@@ -112,9 +116,59 @@ class Neo4jHandler:
 class Neo4jConnector(object):
 
     def __init__(self, url, author, password):
-        super(Neo4jConnector, self).__init__()
+        # super(Neo4jConnector, self).__init__()
         self.url = url
         self.author = author
         self.password = password
-        self.driver = GraphDatabase(self.url, auth=(self.author, self.password))
-        self.neo4j_db = Neo4jHandler(self.driver)
+        self.driver = GraphDatabase.driver(self.url, auth=(self.author, self.password))
+        # self.neo4j_db = Neo4jHandler(self.driver)
+
+    def cypherexecuter(self, cypher):
+        """
+        单纯的执行cypher语句
+        :param cypher:
+        :return:
+        """
+        with self.driver.session() as session:
+            with session.begin_transaction() as tx:
+                response = tx.run(cypher)
+                # return response
+        session.close()
+        # return response
+
+    def create_doc_node(self, node_info):
+        """
+        创建doc节点
+        :param node_info: node的属性
+        :return:
+        """
+        cypher = """
+                 CREATE (%s: %s {id: '%s', title: '%s'})
+                 """%(node_info['node_type'], node_info['location'], node_info['id'], node_info['title'])
+        self.cypherexecuter(cypher)
+        # print result
+
+    def check_node_exist(self, node_info):
+        """
+        判断节点是否已经存在
+        :param node_info:
+        :return:
+        """
+        cypher = """
+                 MATCH (a)
+                 WHERE a.id = '%s'
+                 RETURN a
+                 """ % node_info['id']
+        with self.driver.session() as session:
+            with session.begin_transaction() as tx:
+                result = tx.run(cypher)
+                # if len(result.items()):
+                #     return True
+                # else:
+                #     return False
+                for record in result:
+                    return True
+                return False
+
+
+# neo4j_db = Neo4jConnector("bolt://localhost:7687", "neo4j", "4vYzvwdi")

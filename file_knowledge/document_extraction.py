@@ -16,6 +16,7 @@ from tool.text_rank_sentence import TextSummary4Sentence
 from tool.text_rank_seg import TextSummary4Seg
 from tool.trans_dic import NE_DICT, CENTER_DEPARTMENT, LOCATION_ORG_DICT
 from tool.db_connector import dbConnector
+from tool.es_connector import esConnector
 import re
 
 import sys
@@ -63,6 +64,7 @@ class documentExtraction(object):
             if not self.file_name:
                 self.title = self.record.get('noticeTitle', '')
                 self.content = self.record.get('noticeContent', '')
+                self.type = 'notice'
             else:
                 # 去掉文件名中的空格，文件格式转换时做了空格的消除
                 self.file_name = self.__pre_deal_with_str(self.file_name)
@@ -75,18 +77,21 @@ class documentExtraction(object):
                     trans_file_type = 'csv'
                 else:
                     trans_file_type = 'txt'
-                trans_file_name = self.file_name[: -1 * (len(file_type) + 1)] + trans_file_type
+                trans_file_name = self.file_name[: -1 * (len(file_type) + 1)] + '.' + trans_file_type
                 if os.path.isfile(os.path.join(FILE_PATH, trans_file_name)):
                     logger.info('reading file %s' % trans_file_name)
                     with open(os.path.join(FILE_PATH, trans_file_name), 'r') as f:
                         self.content = f.read()
+                        self.type = file_type
                 else:
                     logger.warn('file %s do not have trans file' % trans_file_name)
                     self.content = ''
+                    self.type = ''
         except Exception, e:
             logger.error('get content and title string failed for %s' % str(e))
             self.title = ''
             self.content = ''
+            self.type = ''
 
     def __pre_deal_with_str(self, string):
         """
@@ -270,25 +275,57 @@ class documentExtraction(object):
                 'entity_loc': [item[0] for item in entity_list if item[1] == 'ns'],
                 'entity_org': [item[0] for item in entity_list if item[1] == 'ni'],
                 'entity_name': [item[0] for item in entity_list if item[1] == 'np'],
-                'key_word': [item[0] for item in self._extract_keyword_from_doc()],
-                'abstract': [item[0] for item in self._extract_abstract_from_doc()],
+                'attachment_file': self.record.get('attachmentFileList', []) if not self.file_name else [],
+                'parrent_file': self.record.get('noticeTitle', '') if self.file_name else '',
+                'key_word': [item[0] for item in self._extract_keyword_from_doc()] \
+                    if self.type not in ['xls', 'xlsx'] else [],
+                'abstract': [item[0] for item in self._extract_abstract_from_doc()] \
+                    if self.type not in ['xls', 'xlsx'] else [],
                 'data_key': [],
                 'data': {}
             }
-            print knowledge_body
+            return knowledge_body
         except Exception, e:
             logger.error('extract knowledge from record failed for %s' % str(e))
+            return {}
 
 if __name__ == '__main__':
     # 测试
     thunlp_model = thulac.thulac(seg_only=False, model_path=THUNLP_MODEL_PATH, \
                                  user_dict=THUNLP_USER_DIC_PATH)
     mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
-    for record in mongo.collection.find():
-        if len(record.get('attachmentLinkList', [])):
+    es = esConnector(url='localhost:9200', index='test', doc_type='finace')
+    for record in mongo.collection.find().batch_size(1):
+        if not len(record.get('attachmentFileList', [])):
             document_model = documentExtraction(record, thunlp_model)
-            document_model.extract_knowledge_from_record()
+            if not es.check_info_exist(document_model.title):
+                logger.info('begin extract doc %s...' % document_model.title)
+                document_info = document_model.extract_knowledge_from_record()
+                if len(document_info.keys()):
+                    es.insert_single_info(document_info)
+                else:
+                    logger.warn('extract document info failed ,skip es store')
+            else:
+                logger.info('doc %s exist in es, skip' %document_model.title)
         else:
-            for file_name in record.get('attachmentLinkList', []):
+            document_model = documentExtraction(record, thunlp_model)
+            if not es.check_info_exist(document_model.title):
+                logger.info('begin extract doc %s...' % document_model.title)
+                document_info = document_model.extract_knowledge_from_record()
+                if len(document_info.keys()):
+                    es.insert_single_info(document_info)
+                else:
+                    logger.warn('extract document info failed ,skip es store')
+            else:
+                logger.info('doc %s exist in es, skip' %document_model.title)
+            for file_name in record.get('attachmentFileList', []):
                 document_model = documentExtraction(record, thunlp_model, file_name=file_name)
-                document_model.extract_knowledge_from_record()
+                if not es.check_info_exist(document_model.title):
+                    logger.info('begin extract doc %s...' % document_model.title)
+                    document_info = document_model.extract_knowledge_from_record()
+                    if len(document_info.keys()):
+                        es.insert_single_info(document_info)
+                    else:
+                        logger.warn('extract document info failed ,skip es store')
+                else:
+                    logger.info('doc %s exist in es, skip' % document_model.title)

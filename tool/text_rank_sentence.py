@@ -95,7 +95,7 @@ class TextSummary4Sentence(object):
         for sent in sents_1:
             if sent in sents_2:
                 counter += 1
-        return counter / (math.log(len(sents_1) + len(sents_2)))
+        return counter / (math.log(len(sents_1) + len(sents_2)) + 1)
 
     def cal_sentence_similarity(self, sentence1, sentence2):
         """

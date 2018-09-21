@@ -12,19 +12,21 @@
 import thulac
 import os
 import sys
-from tool.db_connector import dbConnector
+# from tool.db_connector import dbConnector
 from tool.logger import logger
 from tool.trans_dic import *
-import elasticsearch
+from tool.es_connector import esConnector
+from tool.neo_connector import Neo4jConnector
+# import elasticsearch
 
 # GOLBAL PARAMS
 THUNLP_MODEL_PATH = "/home/showlove/cc/code/THULAC-Python/models"
 THUNLP_USER_DIC_PATH = "/home/showlove/PycharmProjects/data_test/nlp/user_dic.txt"
 STOP_WORD_DIC_PATH = "/home/showlove/PycharmProjects/data_test/nlp/stop_word_dic.txt"
-MONGODB_SERVER = "127.0.0.1"
-MONGODB_PORT = 27017
-MONGODB_DB = "gov_finace"
-MONGODB_COLLECTION = "center"
+# MONGODB_SERVER = "127.0.0.1"
+# MONGODB_PORT = 27017
+# MONGODB_DB = "gov_finace"
+# MONGODB_COLLECTION = "center"
 
 """
 文本域
@@ -49,11 +51,31 @@ type    notice/file
     'entity_org': [],       # 命名实体，机构
     'entity_name': [],      # 命名实体，姓名
     'attachment_file': [],  # 附件列表
+    'parent_file': '',      # 父级文件
     'key_word': [],         # 关键词
     'abstract': [],         # 摘要
     'data_key': [],         # 抽取的数据项目
     'data': {}/[],          # 抽取的数据对象
 }
+"""
+
+"""
+节点类型
+notice
+file
+entity
+
+关系抽取
+最简版
+notice attach file
+file from notice
+notice quote file
+notice quote notice
+notice explain notice
+notice transmit notice
+notice include entity
+file include entity
+
 """
 
 # mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
