@@ -96,9 +96,11 @@ file include entity
 
 """
 relation rule
-(source_info, target_info)
-return match_rule, relation_name
+(source_info, #target_info)
+return match_rule:bool, relation_name:string, params:[{}]
 """
+
+
 
 
 class buildGraph(object):
@@ -106,6 +108,103 @@ class buildGraph(object):
         # init db
         self.neo4j_db = Neo4jConnector(NEO4J_URL, NEO4J_AUTH, NEO4J_PASSWORD)
         self.es_db = esConnector(ES_URL, ES_INDEX, ES_DOC_TYPE)
+        self.rule_list = [self.rule_notice_attach]
+
+    # rule part
+    def rule_notice_attach(self, source_info):
+        """
+        提取附件关系的规则
+        :param source_info:
+        :return: bool, string, list
+        """
+        try:
+            link_info = list()
+            info = source_info.get('_source', {})
+            source_id = source_info.get('_id', '')
+            if len(info.get('attachment_file', [])):
+                for attachment_file in info.get('attachment_file'):
+                    search_name = attachment_file[: - 1 * (len(attachment_file.split('.')[-1]) + 1)]
+                    searching_id = self.es_db.search_id_from_title(search_name)
+                    if searching_id:
+                        link_info.append({
+                            'source': source_id,
+                            'target': searching_id,
+                            'sourceType': 'id',
+                            'targetTarget': 'id'
+                        })
+                    else:
+                        pass
+                if len(link_info):
+                    return True, 'attach', link_info
+                else:
+                    return False, '', []
+            else:
+                return False, '', []
+        except Exception, e:
+            logger.error('searching attach relation failed for %s' % str(e))
+            return False, '', []
+
+    def rule_file_from(self, source_info):
+        """
+        提取附件从属的规则
+        :param source_info:
+        :return: bool, string, list
+        """
+        try:
+            link_info = list()
+            info = source_info.get('_source', {})
+            source_id = source_info.get('_id', '')
+            if len(info.get('parrent_file', [])):
+                for attachment_file in info.get('parrent_file'):
+                    search_name = attachment_file
+                    searching_id = self.es_db.search_id_from_title(search_name)
+                    if searching_id:
+                        link_info.append({
+                            'source': source_id,
+                            'target': searching_id,
+                            'sourceType': 'id',
+                            'targetTarget': 'id'
+                        })
+                    else:
+                        pass
+                if len(link_info):
+                    return True, 'from', link_info
+                else:
+                    return False, '', []
+            else:
+                return False, '', []
+        except Exception, e:
+            logger.error('searching attach relation failed for %s' % str(e))
+            return False, '', []
+
+    def rule_doc_quote(self, source_info):
+        """
+        提取文档的引用关系，包括idendify和文件的引用
+        :param source_info:
+        :return:
+        """
+        try:
+            link_info = list()
+            info = source_info.get('_source', {})
+            source_id = source_info.get('_id', '')
+            source_identify = info.get('identify', '')
+            source_file = list()
+            # can use counter
+            for item in info.get('quote_title', []):
+                if item not in source_file:
+                    source_file.append(item)
+            for item in info.get('quote_content', []):
+                if item not in source_file:
+                    source_file.append(item)
+            # seaching
+            _id_list = self.es_db.search_id_list_from_identify(source_indentify)
+
+        except Exception, e:
+            logger.error('searching attach relation failed for %s' % str(e))
+            return False, '', []
+
+    # rule part end
+    # ########################################################
 
     def _create_doc_node(self, result_info):
         """
@@ -135,7 +234,45 @@ class buildGraph(object):
         try:
             entity_cache_list = list()
             for doc_info in result_info:
-                pass
+                info = doc_info['_source']
+                entity_name = info.get('entity_name', [])
+                entity_org = info.get('entity_org', [])
+                entity_loc = info.get('entity_loc', [])
+                for seg in entity_name:
+                    if seg not in entity_cache_list:
+                        entity_info = {
+                            'entity_type': 'name',
+                            'seg': seg
+                        }
+                        self.neo4j_db.create_entity_node(entity_info)
+                        logger.info('create name entity node of %s' % seg)
+                        entity_cache_list.append('seg')
+                    else:
+                        continue
+                for seg in entity_org:
+                    if seg not in entity_cache_list:
+                        entity_info = {
+                            'entity_type': 'org',
+                            'seg': seg
+                        }
+                        self.neo4j_db.create_entity_node(entity_info)
+                        logger.info('create organization entity node of %s' % seg)
+                        entity_cache_list.append('seg')
+                    else:
+                        continue
+
+                for seg in entity_loc:
+                    if seg not in entity_cache_list:
+                        entity_info = {
+                            'entity_type': 'loc',
+                            'seg': seg
+                        }
+                        self.neo4j_db.create_entity_node(entity_info)
+                        logger.info('create location entity node of %s' % seg)
+                        entity_cache_list.append('seg')
+                    else:
+                        continue
+
         except Exception, e:
             logger.error('create entity node failed for %s' %str(e))
 
@@ -179,6 +316,7 @@ class buildGraph(object):
             result = self.es_db.search_all(size=10000)
             result_info = result['hits']['hits']
             self._create_doc_node(result_info)
+            self._create_entity_node(result_info)
 
         except Exception, e:
             logger.error('build graph failed for %s' % str(e))

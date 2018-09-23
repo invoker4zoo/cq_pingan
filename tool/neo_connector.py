@@ -148,6 +148,17 @@ class Neo4jConnector(object):
         self.cypherexecuter(cypher)
         # print result
 
+    def create_entity_node(self, entity_info):
+        """
+        创建命名实体节点
+        :param entity_info:
+        :return:
+        """
+        cypher = """
+                 CREATE (entity: %s) {seg: '%s'}
+                 """%(entity_info['entity_type'], entity_info['seg'])
+        self.cypherexecuter(cypher)
+
     def check_node_exist(self, node_info):
         """
         判断节点是否已经存在
@@ -170,5 +181,10 @@ class Neo4jConnector(object):
                     return True
                 return False
 
+    def create_relation_(self, relation_key, link_info):
+        """
+
+        :return:
+        """
 
 # neo4j_db = Neo4jConnector("bolt://localhost:7687", "neo4j", "4vYzvwdi")

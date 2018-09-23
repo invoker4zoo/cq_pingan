@@ -53,7 +53,10 @@ class documentExtraction(object):
 
         self.file_pattern = re.compile('《'.decode('utf-8') + u'(.*?)' + '》'.decode('utf-8'))
         self.link_pattern = re.compile('//(.*?)\.')
-        self.identify_pattern = re.compile(u'.{2}〔\d+〕\d+号')
+        # self.identify_pattern = re.compile(u'.{2}〔\d+〕\d+号')
+        # debug on 2018.9.22
+        # identity的描述问题
+        self.identify_pattern = re.compile(u'财.+〔\d+〕\d+号')
 
     def __get_content_title(self):
         """
@@ -259,7 +262,10 @@ class documentExtraction(object):
             # 数据库抽取
             entity_list = self._extract_entity_from_record()
             knowledge_body = {
-                'publish_time': self.record.get('publishTime', ''),
+                # debug 存入es中时时间字段不能为空，为空时不能进行数据的插入
+                # #爬虫数据中有可能没有时间字段，可由content_attach中进行抽取，暂时不进行，进行默认时间的录入
+                # cc 2018-09-23
+                'publish_time': self.record.get('publishTime', '2018-08-01'),
                 'publish_location': self.record.get('location', ''),
                 'publish_org': LOCATION_ORG_DICT.get(self.record.get('location', ''), ''),
                 'publish_org_2': self._extract_public_org_2(),
