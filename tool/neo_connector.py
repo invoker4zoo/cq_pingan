@@ -181,10 +181,11 @@ class Neo4jConnector(object):
                     return True
                 return False
 
-    def create_relation_(self, relation_key, link_info):
+    def create_relation(self, relation_key, link_info):
         """
-
+        创建关联关系
+        :param relation_key:
+        :param link_info:
         :return:
         """
-
 # neo4j_db = Neo4jConnector("bolt://localhost:7687", "neo4j", "4vYzvwdi")

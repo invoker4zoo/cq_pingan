@@ -122,7 +122,7 @@ class esConnector(object):
 
     def search_id_list_from_identify(self, identify):
         """
-
+        通过文件编号搜索引用id列表
         :param identify:
         :return:
         """
@@ -145,6 +145,87 @@ class esConnector(object):
                 id_list.append(_id)
         return id_list
 
+    def search_id_list_from_filename(self, file_name):
+        """
+        通过文件名搜索引用id列表
+        :param file_name:
+        :return:
+        """
+        dsl_query = {
+            'query': {
+                'bool': {
+                    'should': [
+                        {
+                            'match': {
+                                    'quote_title': {
+                                        'query': file_name,
+                                        'operator': 'and'
+                                    }
+                                }
+                        },
+                        {
+                            'match': {
+                                'title': {
+                                    'query': file_name,
+                                    'operator': 'and'
+                                }
+                            }
+                        },
+                    ]
+                }
+            }
+        }
+        result = self.es.search(self.index, self.doc_type, body=dsl_query)
+        id_list = list()
+        for item in result.get('hits', {}).get('hits', []):
+            _id = item.get('_id', '')
+            if _id not in id_list and _id != '':
+                id_list.append(_id)
+        return id_list
+
+    def search_id_list_explain(self, file_name):
+        """
+        通过文件名搜索政策解读id列表
+        :param file_name:
+        :return:
+        """
+        dsl_query = {
+            'query': {
+                    'match': {
+                            'quote_title': {
+                                'query': file_name,
+                                'operator': 'and'
+                            }
+                        }
+            }
+        }
+        result = self.es.search(self.index, self.doc_type, body=dsl_query)
+        id_list = list()
+        for item in result.get('hits', {}).get('hits', []):
+            _id = item.get('_id', '')
+            if _id not in id_list and _id != '':
+                id_list.append(_id)
+        return id_list
+
+    def search_info_by_keyword(self, key_word):
+        """
+        通过关键字进行召回
+        :param key_word:
+        :return:
+        """
+        dsl_query = {
+            'query': {
+                    'match': {
+                            'quote_title': {
+                                'query': key_word,
+                                'operator': 'and'
+                            }
+                        }
+            }
+        }
+        result = self.es.search(self.index, self.doc_type, body=dsl_query)
+        return result.get('hits', {}).get('hits', [])
+
 if __name__ == '__main__':
     es_db = esConnector(url='localhost:9200', index='test', doc_type='finace')
     # result = es_db.search_all()
@@ -162,7 +243,10 @@ if __name__ == '__main__':
     # title = u'各省份申报资料清单'
     title = '关于印发《彩票监管咨询和评审专家管理暂行办法》的通知'
     title = '彩票监管咨询和评审专家管理暂行办法'
+    # title = '解读'
+    # title = '中国—中东欧国家合作索非亚纲要'
     # result = es_db.check_info_exist(title)
+    result = es_db.search_id_list_from_filename(title)
     result = es_db.search_id_from_title(title)
     # print result
     # 财会〔2018〕24号

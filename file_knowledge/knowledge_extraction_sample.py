@@ -188,7 +188,9 @@ class buildGraph(object):
             info = source_info.get('_source', {})
             source_id = source_info.get('_id', '')
             source_identify = info.get('identify', '')
+            source_quote = info.get('quote_title', []) + info.get('quote_content', [])
             source_file = list()
+            source_quote_file = list()
             # can use counter
             for item in info.get('quote_title', []):
                 if item not in source_file:
@@ -196,13 +198,98 @@ class buildGraph(object):
             for item in info.get('quote_content', []):
                 if item not in source_file:
                     source_file.append(item)
+            for item in souce_quote:
+                if item not in source_quote_file:
+                    source_quote_file.append(item)
             # seaching
             _id_list = self.es_db.search_id_list_from_identify(source_indentify)
+            for _id in _id_list:
+                if _id != source_id:
+                   link_info.append({
+                        'source': _id,
+                        'target': source_id,
+                        'sourceType': 'id',
+                        'targetType': 'id'
+                   })
+            for quote_file in source_quote_file:
+                _id_list = self.es_db.search_id_list_from_filename(quote_file)
+                for _id in _id_list:
+                    if _id != source_id:
+                        link_info.append({
+                            'source': _id,
+                            'target': source_id,
+                            'sourceType': 'id',
+                            'targetType': 'id'
+                        })
+            if len(link_info):
+                return True, 'quote', link_info
+            else:
+                return False, '', []
 
         except Exception, e:
             logger.error('searching attach relation failed for %s' % str(e))
             return False, '', []
 
+    def rule_doc_entity(self, source_info):
+        """
+
+        :param source_info:
+        :return:
+        """
+        try:
+            link_info = list()
+            info = source_info.get('_source', {})
+            source_id = source_info.get('_id', '')
+            entity_name = info.get('entity_name', [])
+            entity_org = info.get('entity_org', [])
+            entity_loc = info.get('entity_loc', [])
+            entity_list = entity_name + entity_org + entity_loc
+            for seg in entity_list:
+                link_info.append({
+                    'source': source_id,
+                    'target': seg,
+                    'sourceType': 'id',
+                    'targetType': 'seg'
+                })
+            if len(link_info):
+                return True, 'include', link_info
+            else:
+                return False, '', []
+        except Exception, e:
+            logger.error('searching entity relation failed for %s' % str(e))
+            return False, '', []
+
+    def rule_doc_explain(self, source_info):
+        """
+        解读文件的关系提取
+        :param source_info:
+        :return:
+        """
+        try:
+            link_inf = list()
+            info = source_info.get('_source', {})
+            source_id = source_info.get('_id', '')
+            if len(info.get('quote_title'), []):
+                for quote_file in info.get('quote_title'):
+                    _id_list = self.es_db.search_id_list_from_filename(quote_file)
+                    for _id in _id_list:
+                        if _id != source_id:
+                            link_info.append({
+                                'source': _id,
+                                'target': source_id,
+                                'sourceType': 'id',
+                                'targetType': 'id'
+                            })
+                if len(link_info):
+                    return True, 'explain', link_info
+                else:
+                    return False, '', []
+            else:
+                return False, '', []
+
+        except Exception, e:
+            logger.error('searching doc explain relationship failed for %s' % str(e))
+            return False, '', []
     # rule part end
     # ########################################################
 
