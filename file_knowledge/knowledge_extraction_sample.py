@@ -108,7 +108,11 @@ class buildGraph(object):
         # init db
         self.neo4j_db = Neo4jConnector(NEO4J_URL, NEO4J_AUTH, NEO4J_PASSWORD)
         self.es_db = esConnector(ES_URL, ES_INDEX, ES_DOC_TYPE)
-        self.rule_list = [self.rule_notice_attach]
+        # self.rule_list = [self.rule_notice_attach, self.rule_doc_entity, self.rule_doc_explain,\
+        #                   self.rule_doc_quote, self.rule_file_from]
+
+        self.rule_list = [self.rule_notice_attach, self.rule_doc_explain, \
+                      self.rule_doc_quote, self.rule_file_from]
 
     # rule part
     def rule_notice_attach(self, source_info):
@@ -124,14 +128,15 @@ class buildGraph(object):
             if len(info.get('attachment_file', [])):
                 for attachment_file in info.get('attachment_file'):
                     search_name = attachment_file[: - 1 * (len(attachment_file.split('.')[-1]) + 1)]
-                    searching_id = self.es_db.search_id_from_title(search_name)
-                    if searching_id:
-                        link_info.append({
-                            'source': source_id,
-                            'target': searching_id,
-                            'sourceType': 'id',
-                            'targetTarget': 'id'
-                        })
+                    _id_list, _title_list = self.es_db.search_id_from_title(search_name)
+                    for _id, _title in zip(_id_list, _title_list):
+                        if _id != source_id and _title == search_name:
+                            link_info.append({
+                                'source': source_id,
+                                'target': _id,
+                                'sourceType': 'id',
+                                'targetType': 'id'
+                            })
                     else:
                         pass
                 if len(link_info):
@@ -141,7 +146,7 @@ class buildGraph(object):
             else:
                 return False, '', []
         except Exception, e:
-            logger.error('searching attach relation failed for %s' % str(e))
+            logger.error('searching attach relation attach failed for %s' % str(e))
             return False, '', []
 
     def rule_file_from(self, source_info):
@@ -154,19 +159,17 @@ class buildGraph(object):
             link_info = list()
             info = source_info.get('_source', {})
             source_id = source_info.get('_id', '')
-            if len(info.get('parrent_file', [])):
-                for attachment_file in info.get('parrent_file'):
-                    search_name = attachment_file
-                    searching_id = self.es_db.search_id_from_title(search_name)
-                    if searching_id:
+            if len(info.get('parrent_file', '')):
+                search_name = info.get('parrent_file')
+                _id_list, _title_list = self.es_db.search_id_from_title(search_name)
+                for _id, _title in zip(_id_list, _title_list):
+                    if _id != source_id and _title == search_name:
                         link_info.append({
                             'source': source_id,
-                            'target': searching_id,
+                            'target': _id,
                             'sourceType': 'id',
-                            'targetTarget': 'id'
+                            'targetType': 'id'
                         })
-                    else:
-                        pass
                 if len(link_info):
                     return True, 'from', link_info
                 else:
@@ -174,7 +177,7 @@ class buildGraph(object):
             else:
                 return False, '', []
         except Exception, e:
-            logger.error('searching attach relation failed for %s' % str(e))
+            logger.error('searching attach relation from failed for %s' % str(e))
             return False, '', []
 
     def rule_doc_quote(self, source_info):
@@ -198,16 +201,16 @@ class buildGraph(object):
             for item in info.get('quote_content', []):
                 if item not in source_file:
                     source_file.append(item)
-            for item in souce_quote:
+            for item in source_quote:
                 if item not in source_quote_file:
                     source_quote_file.append(item)
             # seaching
-            _id_list = self.es_db.search_id_list_from_identify(source_indentify)
+            _id_list = self.es_db.search_id_list_from_identify(source_identify)
             for _id in _id_list:
                 if _id != source_id:
                    link_info.append({
-                        'source': _id,
-                        'target': source_id,
+                        'source': source_id,
+                        'target': _id,
                         'sourceType': 'id',
                         'targetType': 'id'
                    })
@@ -216,8 +219,8 @@ class buildGraph(object):
                 for _id in _id_list:
                     if _id != source_id:
                         link_info.append({
-                            'source': _id,
-                            'target': source_id,
+                            'source': source_id,
+                            'target': _id,
                             'sourceType': 'id',
                             'targetType': 'id'
                         })
@@ -227,7 +230,7 @@ class buildGraph(object):
                 return False, '', []
 
         except Exception, e:
-            logger.error('searching attach relation failed for %s' % str(e))
+            logger.error('searching attach relation quote failed for %s' % str(e))
             return False, '', []
 
     def rule_doc_entity(self, source_info):
@@ -266,10 +269,15 @@ class buildGraph(object):
         :return:
         """
         try:
-            link_inf = list()
+            link_info = list()
             info = source_info.get('_source', {})
             source_id = source_info.get('_id', '')
-            if len(info.get('quote_title'), []):
+            title = info.get('title', '')
+            if '解读' in title or '答记者问' in title:
+                pass
+            else:
+                return False, '', []
+            if len(info.get('quote_title', [])):
                 for quote_file in info.get('quote_title'):
                     _id_list = self.es_db.search_id_list_from_filename(quote_file)
                     for _id in _id_list:
@@ -305,6 +313,7 @@ class buildGraph(object):
                 if doc_analysis:
                     if not self.neo4j_db.check_node_exist(doc_analysis):
                         self.neo4j_db.create_doc_node(doc_analysis)
+                        logger.info('create node...')
                     else:
                         logger.info('node is existed, skip')
                 else:
@@ -333,7 +342,7 @@ class buildGraph(object):
                         }
                         self.neo4j_db.create_entity_node(entity_info)
                         logger.info('create name entity node of %s' % seg)
-                        entity_cache_list.append('seg')
+                        entity_cache_list.append(seg)
                     else:
                         continue
                 for seg in entity_org:
@@ -344,7 +353,7 @@ class buildGraph(object):
                         }
                         self.neo4j_db.create_entity_node(entity_info)
                         logger.info('create organization entity node of %s' % seg)
-                        entity_cache_list.append('seg')
+                        entity_cache_list.append(seg)
                     else:
                         continue
 
@@ -356,7 +365,7 @@ class buildGraph(object):
                         }
                         self.neo4j_db.create_entity_node(entity_info)
                         logger.info('create location entity node of %s' % seg)
-                        entity_cache_list.append('seg')
+                        entity_cache_list.append(seg)
                     else:
                         continue
 
@@ -393,6 +402,26 @@ class buildGraph(object):
             logger.info('analysis doc info failed for %s' % str(e))
             return None
 
+    def _create_node_relationship(self, result_info, rule_list):
+        """
+        根据规则建立节点间的链接关系
+        :param result_info:
+        :return:
+        """
+        try:
+            for source_info in result_info:
+                # begin match rules
+                logger.info('extract file with id %s' % str(source_info.get('_id','')))
+                for rule in rule_list:
+                    is_match, relationship_type, relationship_info = rule(source_info)
+                    if is_match:
+                        logger.info('matching rule %s'%rule.__name__)
+                        self.neo4j_db.create_relation(relationship_type, relationship_info)
+                    else:
+                        pass
+        except Exception, e:
+            logger.error('extract relationship between nodes failed for %s' % str(e))
+
     def initial(self):
         """
         建立图数据库的主运行函数
@@ -402,8 +431,10 @@ class buildGraph(object):
         try:
             result = self.es_db.search_all(size=10000)
             result_info = result['hits']['hits']
-            self._create_doc_node(result_info)
-            self._create_entity_node(result_info)
+            # self._create_doc_node(result_info)
+            # self._create_entity_node(result_info)
+            # self._create_node_relationship(result_info, [self.rule_doc_explain, self.rule_doc_quote])
+            self._create_node_relationship(result_info, self.rule_list)
 
         except Exception, e:
             logger.error('build graph failed for %s' % str(e))

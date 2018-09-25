@@ -11,6 +11,8 @@
 
 import thulac
 import os
+import sys
+sys.path.append('..')
 from tool.logger import logger
 from tool.text_rank_sentence import TextSummary4Sentence
 from tool.text_rank_seg import TextSummary4Seg
@@ -19,9 +21,10 @@ from tool.db_connector import dbConnector
 from tool.es_connector import esConnector
 import re
 
-import sys
+# import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
+
 
 
 # GOLBAL PARAMS
@@ -145,11 +148,18 @@ class documentExtraction(object):
         :return:
         """
         try:
+            entity_list = list()
             # title = self.__pre_deal_with_str(self.record.get('noticeTitle', ''))
             # content = self.__pre_deal_with_str(self.record.get('noticeContent', ''))
             title_entity = self.__extract_entity_from_str(self.__pre_deal_with_str(self.title))
             content_entity = self.__extract_entity_from_str(self.__pre_deal_with_str(self.content))
-            return title_entity + content_entity
+            # debug 2018-09-25
+            # remove repeat entity
+            cache_list = title_entity + content_entity
+            for item in cache_list:
+                if item not in entity_list:
+                    entity_list.append(item)
+            return entity_list
         except Exception, e:
             logger.error('extract entity from record failed for %s' % str(e))
             return []
@@ -265,7 +275,7 @@ class documentExtraction(object):
                 # debug 存入es中时时间字段不能为空，为空时不能进行数据的插入
                 # #爬虫数据中有可能没有时间字段，可由content_attach中进行抽取，暂时不进行，进行默认时间的录入
                 # cc 2018-09-23
-                'publish_time': self.record.get('publishTime', '2018-08-01'),
+                'publish_time': self.record.get('publishTime', '') if len(self.record.get('publishTime', '')) else '2018-08-01',
                 'publish_location': self.record.get('location', ''),
                 'publish_org': LOCATION_ORG_DICT.get(self.record.get('location', ''), ''),
                 'publish_org_2': self._extract_public_org_2(),

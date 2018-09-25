@@ -155,7 +155,7 @@ class Neo4jConnector(object):
         :return:
         """
         cypher = """
-                 CREATE (entity: %s) {seg: '%s'}
+                 CREATE (entity: %s {seg: '%s'})
                  """%(entity_info['entity_type'], entity_info['seg'])
         self.cypherexecuter(cypher)
 
@@ -181,11 +181,128 @@ class Neo4jConnector(object):
                     return True
                 return False
 
+    def check_entity_exist(self, seg):
+        """
+        判断命名实体节点是否已经存在
+        :param seg:
+        :return:
+        """
+        cypher = """
+            MATCH (a)
+            WHERE a.seg = '%s'
+            RETURN a
+            """ % seg
+
+        with self.driver.session() as session:
+            with session.begin_transaction() as tx:
+                result = tx.run(cypher)
+                for record in result:
+                    return True
+                return False
+
+    def check_relation_exist(self, relation_key, info):
+        """
+        判断关系是否已经存在
+        :param relation_key:
+        :param info:
+        :return:
+        """
+        cypher = """
+             MATCH (a) - [:%s] -> (b)
+             WHERE a.%s = '%s' AND b.%s = '%s'
+             RETURN a
+             """ % (relation_key, info['sourceType'], info['source'], info['targetType'], info['target'])
+        with self.driver.session() as session:
+            with session.begin_transaction() as tx:
+                result = tx.run(cypher)
+                # if len(result.items()):
+                #     return True
+                # else:
+                #     return False
+                for record in result:
+                    return True
+                return False
+
     def create_relation(self, relation_key, link_info):
         """
         创建关联关系
         :param relation_key:
-        :param link_info:
+        :param link_info: [{
+                        'source':
+                        'target':
+                        'sourceType':
+                        'targetType'
+                    }]
         :return:
         """
-# neo4j_db = Neo4jConnector("bolt://localhost:7687", "neo4j", "4vYzvwdi")
+        for info in link_info:
+            if not self.check_relation_exist(relation_key, info):
+                cypher = """
+                         MATCH (a),(b)
+                         WHERE a.%s = '%s' AND b.%s = '%s'
+                         CREATE (a) - [:%s {type: '%s'}] -> (b)
+                         """ % (info['sourceType'], info['source'], info['targetType'], info['target'], relation_key, relation_key)
+                self.cypherexecuter(cypher)
+            else:
+                logger.info('relation already existed')
+
+    def search_all(self):
+        """
+        get all graph
+        :return:
+        """
+        node_list = list()
+        link_list = list()
+        cypher = """
+                 MATCH (a) - [r] - (b) RETURN a.title,r.type,b.title
+                 """
+        with self.driver.session() as session:
+            with session.begin_transaction() as tx:
+                # result = tx.run(cypher)
+                for record in tx.run(cypher).records():
+                    if record[0] not in node_list:
+                        node_list.append(record[0])
+                    if record[2] not in node_list:
+                        node_list.append(record[2])
+                    link_list.append({
+                        'source': record[0],
+                        'target': record[2],
+                        'linkType': record[1]
+                    })
+                return node_list, link_list
+
+    def search_relation_by_id(self, id):
+        """
+        searching relationship by node id
+        :param id:
+        :return:
+        """
+        try:
+            node_list = list()
+            link_list = list()
+            cypher = """
+                     MATCH (a) - [r] -> (b)
+                     WHERE a.id = '%s' or b.id= '%s'
+                     RETURN a.title, r.type, b.title
+                     """%(id, id)
+            with self.driver.session() as session:
+                with session.begin_transaction() as tx:
+                    # result = tx.run(cypher)
+                    for record in tx.run(cypher).records():
+                        if record[0] not in node_list:
+                            node_list.append(record[0])
+                        if record[2] not in node_list:
+                            node_list.append(record[2])
+                        link_list.append({
+                            'source': record[0],
+                            'target': record[2],
+                            'linkType': record[1]
+                        })
+                    return node_list, link_list
+        except Exception, e:
+            logger.error('searching relation by id failed for %s' % str(e))
+            return None, None
+
+neo4j_db = Neo4jConnector("bolt://localhost:7687", "neo4j", "passw0rd")
+# node_list, link_list = neo4j_db.search_all()
+node_list, link_list = neo4j_db.search_relation_by_id('aMuX9mUB6ohSoT2PlhRJ')
