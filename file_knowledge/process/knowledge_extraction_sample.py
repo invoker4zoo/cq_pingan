@@ -442,6 +442,13 @@ class buildGraph(object):
         except Exception, e:
             logger.error('build graph failed for %s' % str(e))
 
+    def build_graph_by_id(self, id):
+        """
+        建立固定文档的图连接
+        :param id:
+        :return:
+        """
+
 
 if __name__ == '__main__':
     # neo4j_db = Neo4jConnector("bolt://localhost:7687", "neo4j", password="passw0rd")

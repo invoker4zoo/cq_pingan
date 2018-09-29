@@ -46,6 +46,23 @@ class esConnector(object):
             logger.error('search all doc failed for %s' % str(e))
             return None
 
+    def search_doc_by_id(self, id):
+        """
+        search doc by id
+        :param id:
+        :return:
+        """
+        try:
+            dsl_query = {
+                'query': {
+                    'terms': {
+                        '_id': id
+                    }
+                }
+            }
+        except Exception, e:
+            logger.error('search doc by id failed for %s' % str(e))
+
     def insert_single_info(self, info):
         """
 

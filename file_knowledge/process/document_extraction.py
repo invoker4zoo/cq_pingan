@@ -21,6 +21,7 @@ from tool.db_connector import dbConnector
 from tool.es_connector import esConnector
 import re
 from config.config import *
+import json
 
 # import sys
 reload(sys)
@@ -306,6 +307,7 @@ class documentExtraction(object):
             logger.error('extract knowledge from record failed for %s' % str(e))
             return {}
 
+
 def main_process(nlp_model):
     """
     main function
@@ -351,44 +353,35 @@ def main_process(nlp_model):
     except Exception, e:
         logger.error('document extract failed for %s' % str(e))
 
+
+def process_from_json(file_path, nlp_model):
+    """
+    从json文件中读入数据
+    :param file_path: json file path
+    :param nlp_model:
+    :return:
+    """
+    try:
+        mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
+        es = esConnector(url=ES_URL, index=ES_INDEX, doc_type=ES_DOC_TYPE)
+        with open(file_path, 'rb') as f:
+            string = f.read()
+            record = json.loads(string)
+        document_model = documentExtraction(record, nlp_model)
+        if not es.check_info_exist(document_model.title):
+            logger.info('begin extract doc %s...' % document_model.title)
+            document_info = document_model.extract_knowledge_from_record()
+            if len(document_info.keys()):
+                es.insert_single_info(document_info)
+            else:
+                logger.warn('extract document info failed ,skip es store')
+        else:
+            logger.info('doc %s exist in es, skip' % document_model.title)
+    except Exception, e:
+        logger.error('document extraction process from json file failed for %s' %str(e))
+
 if __name__ == '__main__':
     # 测试
     thunlp_model = thulac.thulac(seg_only=False, model_path=THUNLP_MODEL_PATH, \
                                  user_dict=THUNLP_USER_DIC_PATH)
     main_process(thunlp_model)
-    # mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
-    # es = esConnector(url='localhost:9200', index='test', doc_type='finace')
-    # for record in mongo.collection.find().batch_size(1):
-    #     if not len(record.get('attachmentFileList', [])):
-    #         document_model = documentExtraction(record, thunlp_model)
-    #         if not es.check_info_exist(document_model.title):
-    #             logger.info('begin extract doc %s...' % document_model.title)
-    #             document_info = document_model.extract_knowledge_from_record()
-    #             if len(document_info.keys()):
-    #                 es.insert_single_info(document_info)
-    #             else:
-    #                 logger.warn('extract document info failed ,skip es store')
-    #         else:
-    #             logger.info('doc %s exist in es, skip' %document_model.title)
-    #     else:
-    #         document_model = documentExtraction(record, thunlp_model)
-    #         if not es.check_info_exist(document_model.title):
-    #             logger.info('begin extract doc %s...' % document_model.title)
-    #             document_info = document_model.extract_knowledge_from_record()
-    #             if len(document_info.keys()):
-    #                 es.insert_single_info(document_info)
-    #             else:
-    #                 logger.warn('extract document info failed ,skip es store')
-    #         else:
-    #             logger.info('doc %s exist in es, skip' %document_model.title)
-    #         for file_name in record.get('attachmentFileList', []):
-    #             document_model = documentExtraction(record, thunlp_model, file_name=file_name)
-    #             if not es.check_info_exist(document_model.title):
-    #                 logger.info('begin extract doc %s...' % document_model.title)
-    #                 document_info = document_model.extract_knowledge_from_record()
-    #                 if len(document_info.keys()):
-    #                     es.insert_single_info(document_info)
-    #                 else:
-    #                     logger.warn('extract document info failed ,skip es store')
-    #             else:
-    #                 logger.info('doc %s exist in es, skip' % document_model.title)
