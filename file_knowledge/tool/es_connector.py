@@ -46,6 +46,30 @@ class esConnector(object):
             logger.error('search all doc failed for %s' % str(e))
             return None
 
+    def search_doc_by_id(self, id):
+        """
+        search doc by id
+        :param id:
+        :return:
+        """
+        try:
+            dsl_query = {
+                'query': {
+                    'match': {
+                        '_id': id
+                    }
+                }
+            }
+            result = self.es.search(self.index, self.doc_type, body=dsl_query)
+            return result
+            # if len(result.get('hits', {}).get('hits', [])):
+            #     return result.get('hits', {}).get('hits', [])[0]
+            # else:
+            #     return []
+        except Exception, e:
+            logger.error('search doc by id failed for %s' % str(e))
+            return None
+
     def insert_single_info(self, info):
         """
 
@@ -245,6 +269,7 @@ class esConnector(object):
         :return:
         """
         try:
+            response = list()
             dsl_query = {
                 'query': {
                     'bool': {
@@ -305,34 +330,26 @@ class esConnector(object):
             #     },
             #     "size": 50
             # }
-            response = list()
             result = self.es.search(self.index, self.doc_type, body=dsl_query)
             for info in result.get('hits', {}).get('hits', []):
                 response.append(info)
             return response
         except Exception, e:
             logger.error('seaching process failed for %s' % str(e))
+            return []
 
 if __name__ == '__main__':
     es_db = esConnector(url='localhost:9200', index='test', doc_type='finace')
-    # result = es_db.search_all()
-    # print result
-    # search_query = '地方政府债券弹性招标发行业务规程'
-    # dsl_query = {
-    #     'query': {
-    #         'match': {
-    #             'abstract': search_query
-    #         }
-    #     }
-    # }
-    # result = es_db.es.search(es_db.index, es_db.doc_type, body=dsl_query)
-    # print result
-    # title = u'各省份申报资料清单'
+    id = 'dcuZ9mUB6ohSoT2PExRJ'
+    result = es_db.search_doc_by_id(id)
     title = '关于印发《彩票监管咨询和评审专家管理暂行办法》的通知'
     title = '彩票监管咨询和评审专家管理暂行办法'
     title = '关于开展三大粮食作物完全成本保险和收入保险试点工作的通知'
     title = '中央国有资本经营预算支出管理暂行办法'
-    result = es_db.test(title)
+    query = '关于印发《彩票监管咨询和评审专家管理暂行办法》的通知'
+    # query = '管理暂行办法'
+    result = es_db.saerch_by_query(query)
+    # result = es_db.test(title)
     # title = '解读'
     # title = '中国—中东欧国家合作索非亚纲要'
     # result = es_db.check_info_exist(title)

@@ -55,13 +55,19 @@ class esConnector(object):
         try:
             dsl_query = {
                 'query': {
-                    'terms': {
+                    'match': {
                         '_id': id
                     }
                 }
             }
+            result = self.es.search(self.index, self.doc_type, body=dsl_query)
+            if len(result.get('hits', {}).get('hits', [])):
+                return result.get('hits', {}).get('hits', [])[0]
+            else:
+                return []
         except Exception, e:
             logger.error('search doc by id failed for %s' % str(e))
+            return None
 
     def insert_single_info(self, info):
         """
@@ -333,6 +339,8 @@ class esConnector(object):
 
 if __name__ == '__main__':
     es_db = esConnector(url='localhost:9200', index='test', doc_type='finace')
+    id = 'dcuZ9mUB6ohSoT2PExRJ'
+    result = es_db.search_doc_by_id(id)
     title = '关于印发《彩票监管咨询和评审专家管理暂行办法》的通知'
     title = '彩票监管咨询和评审专家管理暂行办法'
     title = '关于开展三大粮食作物完全成本保险和收入保险试点工作的通知'

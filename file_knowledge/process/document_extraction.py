@@ -207,7 +207,7 @@ class documentExtraction(object):
         try:
             link = self.record.get('noticeLink', '')
             link_start = re.findall(self.link_pattern, link)[0]
-            second_org = CENTER_DEPARTMENT.get(link_start)
+            second_org = CENTER_DEPARTMENT.get(link_start, '')
             return second_org
         except Exception, e:
             logger.error('extract public organization level 2 failed for %s' % str(e))
@@ -316,7 +316,9 @@ def main_process(nlp_model):
     try:
         mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
         es = esConnector(url=ES_URL, index=ES_INDEX, doc_type=ES_DOC_TYPE)
-        for record in mongo.collection.find().batch_size(1):
+        cursor = mongo.collection.find(no_cursor_timeout=True)
+        for record in cursor:
+        # for record in mongo.collection.find().batch_size(1):
             if not len(record.get('attachmentFileList', [])):
                 document_model = documentExtraction(record, nlp_model)
                 if not es.check_info_exist(document_model.title):
@@ -350,6 +352,7 @@ def main_process(nlp_model):
                             logger.warn('extract document info failed ,skip es store')
                     else:
                         logger.info('doc %s exist in es, skip' % document_model.title)
+        cursor.close()
     except Exception, e:
         logger.error('document extract failed for %s' % str(e))
 
@@ -362,7 +365,7 @@ def process_from_json(file_path, nlp_model):
     :return:
     """
     try:
-        mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
+        # mongo = dbConnector(MONGODB_SERVER, MONGODB_PORT, MONGODB_DB, MONGODB_COLLECTION)
         es = esConnector(url=ES_URL, index=ES_INDEX, doc_type=ES_DOC_TYPE)
         with open(file_path, 'rb') as f:
             string = f.read()
@@ -379,6 +382,7 @@ def process_from_json(file_path, nlp_model):
             logger.info('doc %s exist in es, skip' % document_model.title)
     except Exception, e:
         logger.error('document extraction process from json file failed for %s' %str(e))
+
 
 if __name__ == '__main__':
     # 测试

@@ -112,7 +112,7 @@ class buildGraph(object):
         #                   self.rule_doc_quote, self.rule_file_from]
 
         self.rule_list = [self.rule_notice_attach, self.rule_doc_explain,\
-                      self.rule_doc_quote, self.rule_file_from]
+                      self.rule_doc_quote, self.rule_file_from, self.rule_doc_trans()]
 
     # rule part
     def rule_notice_attach(self, source_info):
@@ -286,13 +286,61 @@ class buildGraph(object):
                     for _id in _id_list:
                         if _id != source_id:
                             link_info.append({
-                                'source': _id,
-                                'target': source_id,
+                                'source': source_id,
+                                'target': _id,
                                 'sourceType': 'id',
                                 'targetType': 'id'
                             })
                 if len(link_info):
                     return True, 'explain', link_info
+                else:
+                    return False, '', []
+            else:
+                return False, '', []
+
+        except Exception, e:
+            logger.error('searching doc explain relationship failed for %s' % str(e))
+            return False, '', []
+
+    def rule_doc_trans(self, source_info):
+        """
+        转发文件的关系提取
+        :param source_info:
+        :return:
+        """
+        try:
+            link_info = list()
+            info = source_info.get('_source', {})
+            source_id = source_info.get('_id', '')
+            title = info.get('title', '')
+            if '转发' in title:
+                pass
+            else:
+                return False, '', []
+            if len(info.get('title', [])):
+                search_title = info.get('title').replace('转发', '')
+                _id_list, _ = self.es_db.search_id_from_title(search_title)
+                for _id in _id_list:
+                    if _id != source_id:
+                        link_info.append({
+                                'source': source_id,
+                                'target': _id,
+                                'sourceType': 'id',
+                                'targetType': 'id'
+                        })
+                # for quote_file in info.get('quote_title'):
+                #     _id_list = self.es_db.search_id_list_from_filename(quote_file)
+                #     for _id in _id_list:
+                #         if _id != source_id:
+                #             link_info.append({
+                #                 'source': _id,
+                #                 'target': source_id,
+                #                 'sourceType': 'id',
+                #                 'targetType': 'id'
+                #             })
+
+                if len(link_info):
+                    return True, 'trans', link_info
                 else:
                     return False, '', []
             else:
@@ -448,6 +496,16 @@ class buildGraph(object):
         :param id:
         :return:
         """
+        try:
+            doc_result = self.es_db.search_doc_by_id(id)
+            doc_result_info = doc_result['hits']['hits']
+            self._create_doc_node(doc_result_info)
+            self._create_entity_node(doc_result_info)
+            # result = self.es_db.search_all(size=10000)
+            # result_info = result['hits']['hits']
+            self._create_entity_node(doc_result_info)
+        except Exception, e:
+            logger.error('build graph by id failed for %s' % str(e))
 
 
 if __name__ == '__main__':
