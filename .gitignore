@@ -110,3 +110,6 @@ venv.bak/
 # log
 *.log
 *.log.*
+
+# data
+data/*.json

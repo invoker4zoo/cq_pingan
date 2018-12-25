@@ -104,7 +104,8 @@ class nationalStatistics(BaseCrawler):
                     'location': reg_key,
                     'key': zb_node_dict[_data_info['wds'][0]['valuecode']]['name'],
                     'value': _data_info['data']['data'],
-                    'year': _data_info['wds'][2]['valuecode']
+                    'year': _data_info['wds'][2]['valuecode'],
+                    'unit': zb_node_dict[_data_info['wds'][0]['valuecode']]['unit']
                 }
                 self._save_data(data_info)
                 data_list.append(data_info)
@@ -175,6 +176,48 @@ class nationalStatistics(BaseCrawler):
         except Exception, e:
             logger.error('check title failed for %s'%str(e))
 
+
+def trans_json_format(file_name):
+    """
+    修改数据json文件的存储格式
+    :return:
+    """
+    with open(file_name, 'rb') as f:
+        data_result = json.loads(f.read())
+    result = list()
+    for reg_info in data_result:
+        reg_data = reg_info['data']
+        reg_name = reg_info['location']
+        _reg_info = {
+            'location': reg_name,
+            'data': []
+        }
+        key_list = list()
+        _reg_data = list()
+        for data_item in reg_data:
+            if data_item['key'] not in key_list:
+                _reg_data.append({
+                    'key': data_item['key'],
+                    'data': []
+                })
+                key_list.append(data_item['key'])
+            for index, item in enumerate(_reg_data):
+                if item['key'] == data_item['key']:
+                    _reg_data[index]['data'].append(data_item)
+                    break
+                else:
+                    continue
+        for index, _ in enumerate(_reg_data):
+            _reg_data[index]['data'] = sorted(_reg_data[index]['data'], key=lambda x: x['year'], reverse=False)
+
+        # _reg_data = sorted(_reg_data, key=lambda x:x['year'], reverse=False)
+        _reg_info['data'] = _reg_data
+        result.append(_reg_info)
+    with open('../data/trans.json', 'wb') as f:
+        f.write(json.dumps(result, ensure_ascii=False, indent=4))
+
+
+
 if __name__ == '__main__':
     # data = {
     #     'm': 'QueryData',
@@ -199,9 +242,10 @@ if __name__ == '__main__':
     # response = requests.get('http://data.stats.gov.cn/easyquery.htm', params=data, headers=headers)
     # result = json.loads(response.content)
     # print result
-    crawler = nationalStatistics(data_url='http://data.stats.gov.cn/easyquery.htm')
-    crawler.run()
+    # crawler = nationalStatistics(data_url='http://data.stats.gov.cn/easyquery.htm')
+    # crawler.run()
     # with open('../data/地方财政收入.json', 'rb') as f:
     #     content = f.read()
     #     result = json.loads(content)
     #     print result
+    trans_json_format('../data/地方财政支出.json')
